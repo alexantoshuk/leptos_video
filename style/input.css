@@ -1,13 +1,14 @@
 @import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 
+
 @source "./src/**/*.rs";
 @layer components {
-        .expand-clickable-area {
-            @apply relative;
-        }
-        .expand-clickable-area::after {
-            content: '';
-            @apply absolute top-[-10px] left-[-10px] right-[-10px] bottom-[-10px] z-10;
-        }
+    .expand-clickable-area {
+        @apply relative;
     }
+    .expand-clickable-area::after {
+        content: '';
+        @apply absolute top-[-10px] left-[-10px] right-[-10px] bottom-[-10px];
+    }
+}
