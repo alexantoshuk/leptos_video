@@ -9,7 +9,8 @@ use leptos_router::{
 };
 use leptos_use::core::Position;
 use leptos_use::{
-    use_draggable, use_draggable_with_options, use_window, UseDraggableOptions, UseDraggableReturn,
+    use_draggable_with_options, use_mouse_in_element, UseDraggableOptions, UseDraggableReturn,
+    UseMouseInElementReturn,
 };
 use web_sys;
 
@@ -65,7 +66,11 @@ fn HomePage() -> impl IntoView {
     view! {
         <h1>"Welcome to Leptos!"</h1>
         <button on:click=on_click>"Click Me: " {count}</button>
-        <VideoPlayer src="Metallborne.mp4".to_string() width=720 height=300 />
+
+        <div style="width:400px; height:400px;">
+            <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
+                .to_string() />
+        </div>
     }
 }
 use leptos::*;
@@ -74,24 +79,25 @@ use web_sys::wasm_bindgen::convert::OptionIntoWasmAbi;
 use web_sys::MouseEvent;
 
 #[component]
-pub fn VideoPlayer(
-    src: String,
-    #[prop(default = 800)] width: u32,
-    #[prop(default = 450)] height: u32,
-) -> impl IntoView {
+pub fn VideoPlayer(src: String) -> impl IntoView {
     let video_ref = NodeRef::<html::Video>::new();
     let progress_ref = NodeRef::<html::Div>::new();
     let (is_playing, set_is_playing) = signal(false);
     let (progress, set_progress) = signal(0.0);
-    let (progress_hover_pos, set_progress_hover_pos) = signal(0);
     let (duration, set_duration) = signal(0.0);
+    let (info, set_info) = signal(0.0);
     let (current_time, set_current_time) = signal(0.0);
     let (is_muted, set_is_muted) = signal(false);
     let (volume, set_volume) = signal(1.0);
     let (is_fullscreen, set_is_fullscreen) = signal(false);
+    let (drag_offset, set_drag_offset) = signal(0.0);
+
+    let UseMouseInElementReturn {
+        x: progress_hover, ..
+    } = use_mouse_in_element(progress_ref);
 
     // Calculate seek position from mouse event
-    let norm_seek_position = move |client_x: f64| -> f64 {
+    let norm_pos = move |client_x: f64| -> f64 {
         if let Some(target) = progress_ref.get() {
             let rect = target.get_bounding_client_rect();
             let pos = (client_x - rect.left()) / rect.width();
@@ -119,18 +125,21 @@ pub fn VideoPlayer(
         progress_ref,
         UseDraggableOptions::default()
             .initial_value(Position { x: 0.0, y: 0.0 })
-            .target_offset(move |_| {
-                let x = progress_hover_pos.get();
-                (x as f64, 0.0)
-            })
+            .target_offset(move |ev| (0.0, 0.0))
             .on_start(move |ev| {
-                let x = progress_hover_pos.get() as f64;
-                let pos = norm_seek_position(x);
+                if ev.event.pointer_type() == "touch" {
+                    if let Some(p) = progress_ref.get() {
+                        let _ = p.focus();
+                    }
+                }
+                let x = ev.event.x() as f64;
+                set_drag_offset.set(x);
+                let pos = norm_pos(x);
                 seek_to_position(pos);
                 true
             })
             .on_move(move |ev| {
-                let pos = norm_seek_position(ev.position.x);
+                let pos = norm_pos(ev.position.x + drag_offset.get());
                 seek_to_position(pos);
             })
             .stop_propagation(true)
@@ -142,10 +151,6 @@ pub fn VideoPlayer(
             let d = video.duration();
             set_duration.set(d);
         }
-    };
-
-    let mousemove = move |ev: MouseEvent| {
-        set_progress_hover_pos.set(ev.client_x());
     };
 
     let time_update = move |_| {
@@ -219,88 +224,102 @@ pub fn VideoPlayer(
         format!("{minutes:02}:{seconds:02}")
     };
 
-    Effect::new(move |_| {
-        load_metadata();
-        logging::log!("LOAD METADATA");
-    });
+    // Effect::new(move |_| {
+    //     load_metadata();
+    //     logging::log!("LOAD METADATA");
+    //     logging::log!("Position {:?} {}", position.get(), drag_x.get());
+    // });
 
     view! {
-        <div class="relative bg-black overflow-hidden shadow-xl">
+        <div class="w-full h-full flex flex-col overflow-hidden shadow-xl touch-none">
             // Video element
-            <video
-                node_ref=video_ref
-                src=src
-                width=width.to_string()
-                height=height.to_string()
-                on:loadedmetadata=move |_| load_metadata()
-                on:timeupdate=time_update
-                on:click=toggle_play
-                preload="metadata"
-                class="w-full cursor-pointer"
-            />
+            <div class="relative bg-black flex-auto" id="video-bg">
+                <div class="absolute inset-0 m-auto size-auto">
+                    <video
+                        node_ref=video_ref
+                        src=src
+                        preload="metadata"
+                        class="cursor-pointer size-full"
+                        on:timeupdate=time_update
+                        on:click=toggle_play
+                    ></video>
+                </div>
+            </div>
 
             // Controls
-            <div class="relative bg-gray-900">
-                // Progress bar
-                <div
-                    node_ref=progress_ref
-                    class="absolute w-full h-1 expand-clickable-area hover:h-2 hover:-translate-y-1 bg-gray-800 cursor-pointer hover:bg-gray-700 transition-all duration-300"
-                    on:mousemove=mousemove
-                >
+            <div class="flex-none bg-gray-900 bottom-0">
+                <div class="relative mx-2 bg-gray-900 ">
+                    // Progress bar
                     <div
-                        class="h-full bg-blue-500"
-                        style:width=move || format!("{}%", progress.get() * 100.0)
-                    />
-                </div>
-
-                // Control buttons
-                <div class="flex items-center justify-between px-4 py-3">
-                    // Left side
-                    <div class="flex items-center space-x-4">
-                        // Play/Pause button
-                        <button
-                            on:click=toggle_play
-                            class="text-white hover:text-blue-400 transition-colors p-1 rounded"
-                        >
-                            {move || play_pause_icon(!is_playing.get())}
-                        </button>
-
-                        // Time display
-                        <div class="flex items-center text-white text-sm font-mono">
-                            <span>{move || format_time(current_time.get())}</span>
-                            <span class="mx-1 text-gray-400">/</span>
-                            <span class="text-gray-400">{move || format_time(duration.get())}</span>
-                        </div>
+                        node_ref=progress_ref
+                        tabindex="-1"
+                        class="absolute outline-none group origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-800 cursor-pointer transform  transition-all duration-300"
+                    >
+                        <Show when=move || { !is_dragging.get() }>
+                            <div
+                                class="absolute origin-left h-full w-full bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                                style:transform=move || {
+                                    format!("scaleX({})", norm_pos(progress_hover.get()))
+                                }
+                            />
+                        </Show>
+                        <div
+                            class="absolute origin-left h-full w-full bg-blue-500"
+                            style:transform=move || { format!("scaleX({})", progress.get()) }
+                        />
                     </div>
 
-                    // Right side
-                    <div class="flex items-center space-x-4">
-                        // Volume control
-                        <div class="flex items-center">
+                    // Control buttons
+                    <div class="flex items-center justify-between px-4 py-3">
+                        // Left side
+                        <div class="flex items-center space-x-4">
+                            // Play/Pause button
                             <button
-                                on:click=toggle_mute
-                                class="text-white hover:text-blue-400 transition-colors p-1 rounded mr-2"
+                                on:click=toggle_play
+                                class="text-white hover:text-blue-400 transition-colors p-1 rounded cursor-pointer"
                             >
-                                {move || volume_icon(volume.get())}
+                                {move || play_pause_icon(!is_playing.get())}
                             </button>
-                            <input
-                                type="range"
-                                min="0.0"
-                                max="1.0"
-                                step="0.01"
-                                prop:value=move || volume.get()
-                                on:input=change_volume
-                                class="w-16 accent-blue-500 hover:accent-blue-400 transition-colors"
-                            />
+
+                            // Time display
+                            <div class="flex items-center text-white text-sm font-mono">
+                                <span>{move || format_time(current_time.get())}</span>
+                                <span class="mx-1 text-gray-400">/</span>
+                                <span class="text-gray-400">
+                                    {move || format_time(duration.get())}
+                                </span>
+                            </div>
                         </div>
 
-                        // Fullscreen button
-                        <button
-                            on:click=toggle_fullscreen
-                            class="text-white hover:text-blue-400 transition-colors p-1 rounded"
-                        >
-                            {move || fullscreen_icon(is_fullscreen.get())}
-                        </button>
+                        // Right side
+                        <div class="flex items-center space-x-4">
+                            // Volume control
+                            <div class="flex items-center">
+                                <button
+                                    on:click=toggle_mute
+                                    class="text-white hover:text-blue-400 transition-colors p-1 rounded mr-2"
+                                >
+                                    {move || volume_icon(volume.get())}
+                                </button>
+                                <input
+                                    type="range"
+                                    min="0.0"
+                                    max="1.0"
+                                    step="0.01"
+                                    prop:value=move || volume.get()
+                                    on:input=change_volume
+                                    class="w-16 accent-blue-500 hover:accent-blue-400 transition-colors"
+                                />
+                            </div>
+
+                            // Fullscreen button
+                            <button
+                                on:click=toggle_fullscreen
+                                class="text-white hover:text-blue-400 transition-colors p-1 rounded"
+                            >
+                                {move || fullscreen_icon(is_fullscreen.get())}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>

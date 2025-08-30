@@ -16,7 +16,11 @@ leptos_meta = { version = "0.8.5" }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 wasm-bindgen = { version = "=0.2.100", optional = true }
 web-sys = { version = "0.3.77", features = ["DomRect", "Element", "Event"] }
-leptos-use = { version = "0.16", features = ["use_draggable"] }
+leptos-use = { version = "0.16", features = [
+    "use_draggable",
+    "use_mouse_in_element",
+    "on_click_outside",
+] }
 
 [features]
 hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen"]
@@ -66,7 +70,8 @@ tailwind-input-file = "./style/input.css"
 assets-dir = "public"
 
 # The IP and port (ex: 127.0.0.1:3000) where the server serves the content. Use it in your server setup.
-site-addr = "127.0.0.1:3000"
+# site-addr = "127.0.0.1:3000"
+site-addr = "192.168.1.37:3000"
 
 # The port to use for automatic reload monitoring
 reload-port = 3001
