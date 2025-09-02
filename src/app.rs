@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use leptos::ev::{DragEvent, Event};
 use leptos::logging::log;
 use leptos::prelude::*;
@@ -67,9 +69,9 @@ fn HomePage() -> impl IntoView {
         <h1>"Welcome to Leptos!"</h1>
         <button on:click=on_click>"Click Me: " {count}</button>
 
-        <div style="width:400px; height:400px;">
-            <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
-                .to_string() />
+        <div class="p-1" style="width:400px; height:400px;">
+            // <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v".to_string() />
+            <VideoPlayer src="SoftSwissPost_1080x1350.v010.mp4".to_string() />
         </div>
     }
 }
@@ -80,6 +82,7 @@ use web_sys::MouseEvent;
 
 #[component]
 pub fn VideoPlayer(src: String) -> impl IntoView {
+    let video_container_ref = NodeRef::<html::Div>::new();
     let video_ref = NodeRef::<html::Video>::new();
     let progress_ref = NodeRef::<html::Div>::new();
     let (is_playing, set_is_playing) = signal(false);
@@ -134,6 +137,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                 }
                 let x = ev.event.x() as f64;
                 set_drag_offset.set(x);
+                let pos = norm_pos(x);
                 let pos = norm_pos(x);
                 seek_to_position(pos);
                 true
@@ -205,15 +209,18 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
 
     let toggle_fullscreen = move |ev: MouseEvent| {
         ev.stop_propagation();
-        if let Some(video) = video_ref.get() {
-            if !is_fullscreen.get() {
-                if let Ok(_) = video.request_fullscreen() {
-                    set_is_fullscreen.set(true);
-                }
-            } else {
+        if let Some(video) = video_container_ref.get() {
+            if is_fullscreen.get() {
                 document().exit_fullscreen();
-                set_is_fullscreen.set(false);
+            } else {
+                video.request_fullscreen();
             }
+        }
+    };
+
+    let fullscreenchange = move |_| {
+        if let Some(video) = video_container_ref.get() {
+            set_is_fullscreen.set(document().fullscreen_element() == Some(video.into()));
         }
     };
 
@@ -231,33 +238,40 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     // });
 
     view! {
-        <div class="w-full h-full flex flex-col overflow-hidden shadow-xl touch-none">
+        <div
+            node_ref=video_container_ref
+            class="size-full flex flex-col overflow-hidden shadow-xl touch-none group"
+            on:fullscreenchange=fullscreenchange
+        >
             // Video element
             <div class="relative bg-black flex-auto" id="video-bg">
-                <div class="absolute inset-0 m-auto size-auto">
-                    <video
-                        node_ref=video_ref
-                        src=src
-                        preload="metadata"
-                        class="cursor-pointer size-full"
-                        on:timeupdate=time_update
-                        on:click=toggle_play
-                    ></video>
-                </div>
+                <video
+                    // controls
+                    node_ref=video_ref
+                    src=src
+                    preload="metadata"
+                    class="cursor-pointer absolute inset-0 m-auto size-full object-contain"
+                    // controlslist="nodownload nofullscreen"
+                    on:timeupdate=time_update
+                    on:click=toggle_play
+                ></video>
             </div>
 
             // Controls
-            <div class="flex-none bg-gray-900 bottom-0">
-                <div class="relative mx-2 bg-gray-900 ">
+            <div class="flex-none bg-gray-900 bottom-0 group-fullscreen:absolute group-fullscreen:backdrop-blur-md group-fullscreen:bg-black/70 group-fullscreen:inset-x-0 group-fullscreen:w-full group-fullscreen:pt-2
+            group-fullscreen:not-hover:opacity-0 group-fullscreen:hover:delay-0 group-fullscreen:transition-opacity group-fullscreen:delay-600 group-fullscreen:duration-200 px-2">
+                <div class="relative">
                     // Progress bar
                     <div
                         node_ref=progress_ref
                         tabindex="-1"
-                        class="absolute outline-none group origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-800 cursor-pointer transform  transition-all duration-300"
+                        class="absolute outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-600 group-fullscreen:bg-white/20 cursor-pointer transform transition-all duration-200"
                     >
+
                         <Show when=move || { !is_dragging.get() }>
+
                             <div
-                                class="absolute origin-left h-full w-full bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                                class="absolute origin-left h-full w-full bg-white/20 opacity-0 group-hover/progress:opacity-100 transition-opacity duration-200"
                                 style:transform=move || {
                                     format!("scaleX({})", norm_pos(progress_hover.get()))
                                 }
@@ -308,7 +322,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                                     step="0.01"
                                     prop:value=move || volume.get()
                                     on:input=change_volume
-                                    class="w-16 accent-blue-500 hover:accent-blue-400 transition-colors"
+                                    class="appearance-none w-16 text-blue-500"
                                 />
                             </div>
 
@@ -326,6 +340,9 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         </div>
     }
 }
+
+#[component]
+fn Controls() -> impl IntoView {}
 
 fn play_pause_icon(play: bool) -> impl IntoView {
     if play {
@@ -349,7 +366,7 @@ fn play_pause_icon(play: bool) -> impl IntoView {
                     fill="currentColor"
                 ></path>
             </svg>
-        }.into_any()
+        }
     } else {
         view! {
             <svg
@@ -376,7 +393,7 @@ fn play_pause_icon(play: bool) -> impl IntoView {
                     fill="currentColor"
                 ></path>
             </svg>
-        }.into_any()
+        }
     }
 }
 
@@ -399,7 +416,7 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 <line x1="22" x2="16" y1="9" y2="15"></line>
                 <line x1="16" x2="22" y1="9" y2="15"></line>
             </svg>
-        }.into_any()
+        }
     } else if volume < 0.5 {
         view! {
             <svg
@@ -417,7 +434,7 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
             </svg>
-        }.into_any()
+        }
     } else {
         view! {
             <svg
@@ -436,7 +453,7 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
             </svg>
-        }.into_any()
+        }
     }
 }
 
@@ -454,7 +471,7 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
                 <path
                     fill-rule="evenodd"
                     clip-rule="evenodd"
-                    d="M19 5.75a.75.75 0 0 0-.75-.75h-5.833a.75.75 0 0 0 0 1.5H17.5v5.083a.75.75 0 0 0 1.5 0V5.75ZM5 18.25c0 .414.336.75.75.75h5.833a.75.75 0 0 0 0-1.5H6.5v-5.083a.75.75 0 0 0-1.5 0v5.833Z"
+                    d="M18.25 11a.75.75 0 0 0 0-1.5H14.5V5.75a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h4.5Zm-12.5 2a.75.75 0 0 0 0 1.5H9.5v3.75a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5Z"
                     fill="currentColor"
                 ></path>
             </svg>
