@@ -19,6 +19,8 @@ web-sys = { version = "0.3.77", features = ["DomRect", "Element", "Event"] }
 leptos-use = { version = "0.16", features = [
     "use_draggable",
     "use_mouse_in_element",
+    "use_timeout_fn",
+    "use_debounce_fn",
     "on_click_outside",
 ] }
 
