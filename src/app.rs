@@ -11,8 +11,8 @@ use leptos_router::{
 };
 use leptos_use::core::Position;
 use leptos_use::{
-    use_draggable_with_options, use_mouse_in_element, UseDraggableOptions, UseDraggableReturn,
-    UseMouseInElementReturn,
+    use_debounce_fn, use_draggable_with_options, use_mouse_in_element, use_timeout_fn,
+    UseDraggableOptions, UseDraggableReturn,
 };
 use web_sys;
 
@@ -88,6 +88,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     let (is_playing, set_is_playing) = signal(false);
     let (progress, set_progress) = signal(0.0);
     let (duration, set_duration) = signal(0.0);
+    let (controls_visible, set_controls_visible) = signal(false);
     let (info, set_info) = signal(0.0);
     let (current_time, set_current_time) = signal(0.0);
     let (is_muted, set_is_muted) = signal(false);
@@ -95,9 +96,8 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     let (is_fullscreen, set_is_fullscreen) = signal(false);
     let (drag_offset, set_drag_offset) = signal(0.0);
 
-    let UseMouseInElementReturn {
-        x: progress_hover, ..
-    } = use_mouse_in_element(progress_ref);
+    let video_container_mouse = use_mouse_in_element(video_container_ref);
+    let progress_mouse = use_mouse_in_element(progress_ref);
 
     // Calculate seek position from mouse event
     let norm_pos = move |client_x: f64| -> f64 {
@@ -110,6 +110,13 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         }
     };
 
+    let controls_hide = use_debounce_fn(
+        move || {
+            set_controls_visible.set(false);
+        },
+        2000.0, // 2 seconds
+    );
+
     // Handle seek (click or drag)
     let seek_to_position = move |pos: f64| {
         if let Some(video) = video_ref.get() {
@@ -120,11 +127,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         }
     };
 
-    let UseDraggableReturn {
-        x: drag_x,
-        is_dragging,
-        ..
-    } = use_draggable_with_options(
+    let UseDraggableReturn { is_dragging, .. } = use_draggable_with_options(
         progress_ref,
         UseDraggableOptions::default()
             .initial_value(Position { x: 0.0, y: 0.0 })
@@ -146,7 +149,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                 let pos = norm_pos(ev.position.x + drag_offset.get());
                 seek_to_position(pos);
             })
-            .stop_propagation(true)
+            // .stop_propagation(true)
             .prevent_default(true),
     );
 
@@ -160,10 +163,11 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     let time_update = move |_| {
         if !is_dragging.get() {
             if let Some(video) = video_ref.get() {
+                let d = video.duration();
                 let time = video.current_time();
                 set_current_time.set(time);
-                if video.duration() > 0.0 {
-                    set_progress.set(time / video.duration());
+                if d > 0.0 {
+                    set_progress.set(time / d);
                 }
             }
         }
@@ -209,18 +213,18 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
 
     let toggle_fullscreen = move |ev: MouseEvent| {
         ev.stop_propagation();
-        if let Some(video) = video_container_ref.get() {
+        if let Some(el) = video_container_ref.get() {
             if is_fullscreen.get() {
                 document().exit_fullscreen();
             } else {
-                video.request_fullscreen();
+                el.request_fullscreen();
             }
         }
     };
 
     let fullscreenchange = move |_| {
-        if let Some(video) = video_container_ref.get() {
-            set_is_fullscreen.set(document().fullscreen_element() == Some(video.into()));
+        if let Some(el) = video_container_ref.get() {
+            set_is_fullscreen.set(document().fullscreen_element() == Some(el.into()));
         }
     };
 
@@ -231,11 +235,18 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         format!("{minutes:02}:{seconds:02}")
     };
 
-    // Effect::new(move |_| {
-    //     load_metadata();
-    //     logging::log!("LOAD METADATA");
-    //     logging::log!("Position {:?} {}", position.get(), drag_x.get());
-    // });
+    create_effect(move |_| {
+        load_metadata();
+    });
+
+    // Show button on mouse movement and reset hide timer
+    create_effect(move |_| {
+        let _ = video_container_mouse.x.get(); // Track mouse movement
+        let _ = video_container_mouse.y.get();
+
+        set_controls_visible.set(true);
+        controls_hide();
+    });
 
     view! {
         <div
@@ -244,22 +255,29 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
             on:fullscreenchange=fullscreenchange
         >
             // Video element
-            <div class="relative bg-black flex-auto" id="video-bg">
+            <div class="relative bg-black flex-auto">
                 <video
-                    // controls
                     node_ref=video_ref
                     src=src
                     preload="metadata"
                     class="cursor-pointer absolute inset-0 m-auto size-full object-contain"
-                    // controlslist="nodownload nofullscreen"
+                    on:loadedmetadata=move |_| load_metadata()
                     on:timeupdate=time_update
                     on:click=toggle_play
                 ></video>
             </div>
 
             // Controls
-            <div class="flex-none bg-gray-900 bottom-0 group-fullscreen:absolute group-fullscreen:backdrop-blur-md group-fullscreen:bg-black/70 group-fullscreen:inset-x-0 group-fullscreen:w-full group-fullscreen:pt-2
-            group-fullscreen:not-hover:opacity-0 group-fullscreen:hover:delay-0 group-fullscreen:transition-opacity group-fullscreen:delay-600 group-fullscreen:duration-200 px-2">
+            <div class=move || {
+                format!(
+                    "flex-none bg-gray-900 bottom-0 group-fullscreen:absolute group-fullscreen:backdrop-blur-md group-fullscreen:bg-black/70 group-fullscreen:inset-x-0 group-fullscreen:w-full group-fullscreen:pt-2 px-2 transition-opacity duration-200 {} hover:opacity-100",
+                    if is_fullscreen.get() && !controls_visible.get() {
+                        "opacity-0"
+                    } else {
+                        "opacity-100"
+                    },
+                )
+            }>
                 <div class="relative">
                     // Progress bar
                     <div
@@ -267,16 +285,21 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                         tabindex="-1"
                         class="absolute outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-600 group-fullscreen:bg-white/20 cursor-pointer transform transition-all duration-200"
                     >
-
-                        <Show when=move || { !is_dragging.get() }>
-
-                            <div
-                                class="absolute origin-left h-full w-full bg-white/20 opacity-0 group-hover/progress:opacity-100 transition-opacity duration-200"
-                                style:transform=move || {
-                                    format!("scaleX({})", norm_pos(progress_hover.get()))
-                                }
-                            />
-                        </Show>
+                        <div
+                            class=move || {
+                                format!(
+                                    "absolute origin-left h-full w-full bg-white/20 opacity-0 {} transition-opacity duration-200",
+                                    if is_dragging.get() {
+                                        ""
+                                    } else {
+                                        "group-hover/progress:opacity-100"
+                                    },
+                                )
+                            }
+                            style:transform=move || {
+                                format!("scaleX({})", norm_pos(progress_mouse.x.get()))
+                            }
+                        />
                         <div
                             class="absolute origin-left h-full w-full bg-blue-500"
                             style:transform=move || { format!("scaleX({})", progress.get()) }
@@ -311,7 +334,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                             <div class="flex items-center">
                                 <button
                                     on:click=toggle_mute
-                                    class="text-white hover:text-blue-400 transition-colors p-1 rounded mr-2"
+                                    class="text-white hover:text-blue-400 transition-colors p-1 rounded mr-2 cursor-pointer"
                                 >
                                     {move || volume_icon(volume.get())}
                                 </button>
@@ -329,7 +352,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                             // Fullscreen button
                             <button
                                 on:click=toggle_fullscreen
-                                class="text-white hover:text-blue-400 transition-colors p-1 rounded"
+                                class="text-white hover:text-blue-400 transition-colors p-1 rounded cursor-pointer"
                             >
                                 {move || fullscreen_icon(is_fullscreen.get())}
                             </button>
@@ -341,16 +364,13 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     }
 }
 
-#[component]
-fn Controls() -> impl IntoView {}
-
 fn play_pause_icon(play: bool) -> impl IntoView {
     if play {
         view! {
             <svg
                 class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-                width="24"
-                height="24"
+                width="22"
+                height="22"
                 viewBox="0 0 24 24"
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -371,8 +391,8 @@ fn play_pause_icon(play: bool) -> impl IntoView {
         view! {
             <svg
                 class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-                width="24"
-                height="24"
+                width="22"
+                height="22"
                 viewBox="0 0 24 24"
                 stroke-linecap="round"
                 stroke-linejoin="round"
@@ -407,14 +427,14 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 viewBox="0 0 24 24"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                stroke-width="1"
+                stroke-width="1.5"
                 stroke="currentColor"
                 fill="none"
                 role="graphics-symbol"
             >
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <line x1="22" x2="16" y1="9" y2="15"></line>
-                <line x1="16" x2="22" y1="9" y2="15"></line>
+                <line x1="23" y1="9" x2="17" y2="15"></line>
+                <line x1="17" y1="9" x2="23" y2="15"></line>
             </svg>
         }
     } else if volume < 0.5 {
@@ -426,7 +446,7 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 viewBox="0 0 24 24"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                stroke-width="1"
+                stroke-width="1.5"
                 stroke="currentColor"
                 fill="none"
                 role="graphics-symbol"
@@ -444,14 +464,13 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 viewBox="0 0 24 24"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                stroke-width="1"
+                stroke-width="1.5"
                 stroke="currentColor"
                 fill="none"
                 role="graphics-symbol"
             >
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
             </svg>
         }
     }
@@ -461,37 +480,41 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
     if fullscreen {
         view! {
             <svg
-                width="24"
-                height="24"
+                class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                stroke="currentColor"
                 fill="none"
-                focusable="false"
-                aria-hidden="true"
+                role="graphics-symbol"
             >
-                <path
-                    fill-rule="evenodd"
-                    clip-rule="evenodd"
-                    d="M18.25 11a.75.75 0 0 0 0-1.5H14.5V5.75a.75.75 0 0 0-1.5 0v4.5c0 .414.336.75.75.75h4.5Zm-12.5 2a.75.75 0 0 0 0 1.5H9.5v3.75a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5Z"
-                    fill="currentColor"
-                ></path>
+                <polyline points="4 14 10 14 10 20"></polyline>
+                <polyline points="20 10 14 10 14 4"></polyline>
+                <line x1="14" y1="10" x2="21" y2="3"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
             </svg>
         }
     } else {
         view! {
             <svg
-                width="24"
-                height="24"
+                class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                stroke="currentColor"
                 fill="none"
-                focusable="false"
-                aria-hidden="true"
+                role="graphics-symbol"
             >
-                <path
-                    fill-rule="evenodd"
-                    clip-rule="evenodd"
-                    d="M19 5.75a.75.75 0 0 0-.75-.75h-5.833a.75.75 0 0 0 0 1.5H17.5v5.083a.75.75 0 0 0 1.5 0V5.75ZM5 18.25c0 .414.336.75.75.75h5.833a.75.75 0 0 0 0-1.5H6.5v-5.083a.75.75 0 0 0-1.5 0v5.833Z"
-                    fill="currentColor"
-                ></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <polyline points="9 21 3 21 3 15"></polyline>
+                <line x1="21" y1="3" x2="14" y2="10"></line>
+                <line x1="3" y1="21" x2="10" y2="14"></line>
             </svg>
         }
     }
