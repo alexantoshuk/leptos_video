@@ -90,6 +90,8 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     let progress_ref = NodeRef::<html::Div>::new();
     let (is_playing, set_is_playing) = signal(false);
     let (progress, set_progress) = signal(0.0);
+    let (preload_progress, set_preload_progress) = signal(0.0);
+    let (hover_progress, set_hover_progress) = signal(0.0);
     let (duration, set_duration) = signal(0.0);
     let (controls_visible, set_controls_visible) = signal(false);
     let (info, set_info) = signal(0.0);
@@ -100,7 +102,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     let (drag_offset, set_drag_offset) = signal(0.0);
 
     let video_container_mouse = use_mouse_in_element(video_container_ref);
-    let progress_mouse = use_mouse_in_element(progress_ref);
+    // let progress_mouse = use_mouse_in_element(progress_ref);
 
     // Calculate seek position from mouse event
     let norm_pos = move |client_x: f64| -> f64 {
@@ -176,7 +178,19 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         }
     };
 
-    let preload_update = move || {};
+    let preload_update = move |_| {
+        if let Some(video) = video_ref.get() {
+            let n = video.buffered().length();
+            if n == 0 {
+                return;
+            }
+            let n = n - 1;
+
+            if let Ok(loaded) = video.buffered().end(n) {
+                set_preload_progress.set(loaded / duration.get())
+            }
+        }
+    };
 
     let toggle_play = move |_| {
         if let Some(video) = video_ref.get() {
@@ -262,7 +276,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
             // Video element
             <div class="relative flex-auto m-[1px] group-fullscreen:m-0">
                 <video
-                    controls
+                    // controls
                     playsinline
                     disablepictureinpicture
                     node_ref=video_ref
@@ -270,18 +284,10 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                     preload="auto"
                     class="cursor-pointer absolute size-full object-contain"
                     on:loadedmetadata=move |_| load_metadata()
-                    on:ondurationchange=move |_| load_metadata()
+                    on:durationchange=move |_| load_metadata()
                     on:timeupdate=time_update
                     on:click=toggle_play
-                    on:progress=move |t| {
-                        if let Some(video) = video_ref.get() {
-                            let n = video.buffered().length() - 1;
-                            let loaded = video.buffered().end(n).unwrap();
-                            log!(
-                                "progress start: {:?} total:{:?} loaded: {:?} ",video.buffered().start(n).unwrap(),  video.duration() , 100.0*loaded/video.duration()
-                            );
-                        }
-                    }
+                    on:progress=preload_update
                 >
                     "Your browser doesn't support HTML video."
                 </video>
@@ -316,14 +322,15 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                                     },
                                 )
                             }
-                            style:transform=move || {
-                                format!("scaleX({})", norm_pos(progress_mouse.x.get()))
+                            style:transform=move || { format!("scaleX({})", hover_progress.get()) }
+                            on:mousemove=move |ev| {
+                                set_hover_progress.set(norm_pos(ev.client_x() as f64))
                             }
                         />
                         <div
                             class="absolute origin-left h-full w-full bg-white/20"
                             style:transform=move || {
-                                format!("scaleX({})", norm_pos(progress_mouse.x.get()))
+                                format!("scaleX({})", preload_progress.get())
                             }
                         />
                         <div
