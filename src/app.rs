@@ -70,8 +70,11 @@ fn HomePage() -> impl IntoView {
         <button on:click=on_click>"Click Me: " {count}</button>
 
         <div class="p-1" style="width:400px; height:400px;">
-            // <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v".to_string() />
-            <VideoPlayer src="SoftSwissPost_1080x1350.v010.mp4".to_string() />
+            <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
+                .to_string() />
+        // <VideoPlayer src="https://www.pexels.com/ru-ru/download/video/3150562/".to_string() />
+
+        // <VideoPlayer src="SoftSwissPost_1080x1350.v010.mp4".to_string() />
         </div>
     }
 }
@@ -173,6 +176,8 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         }
     };
 
+    let preload_update = move || {};
+
     let toggle_play = move |_| {
         if let Some(video) = video_ref.get() {
             if is_playing.get() {
@@ -251,20 +256,35 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     view! {
         <div
             node_ref=video_container_ref
-            class="size-full flex flex-col overflow-hidden shadow-xl touch-none group"
+            class="size-full flex bg-black flex-col overflow-hidden shadow-xl touch-none group"
             on:fullscreenchange=fullscreenchange
         >
             // Video element
-            <div class="relative bg-black flex-auto">
+            <div class="relative flex-auto m-[1px] group-fullscreen:m-0">
                 <video
+                    controls
+                    playsinline
+                    disablepictureinpicture
                     node_ref=video_ref
                     src=src
-                    preload="metadata"
-                    class="cursor-pointer absolute inset-0 m-auto size-full object-contain"
+                    preload="auto"
+                    class="cursor-pointer absolute size-full object-contain"
                     on:loadedmetadata=move |_| load_metadata()
+                    on:ondurationchange=move |_| load_metadata()
                     on:timeupdate=time_update
                     on:click=toggle_play
-                ></video>
+                    on:progress=move |t| {
+                        if let Some(video) = video_ref.get() {
+                            let n = video.buffered().length() - 1;
+                            let loaded = video.buffered().end(n).unwrap();
+                            log!(
+                                "progress start: {:?} total:{:?} loaded: {:?} ",video.buffered().start(n).unwrap(),  video.duration() , 100.0*loaded/video.duration()
+                            );
+                        }
+                    }
+                >
+                    "Your browser doesn't support HTML video."
+                </video>
             </div>
 
             // Controls
@@ -288,7 +308,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                         <div
                             class=move || {
                                 format!(
-                                    "absolute origin-left h-full w-full bg-white/20 opacity-0 {} transition-opacity duration-200",
+                                    "absolute origin-left h-full w-full bg-white/20 opacity-0 transition-opacity duration-200 {}",
                                     if is_dragging.get() {
                                         ""
                                     } else {
@@ -296,6 +316,12 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                                     },
                                 )
                             }
+                            style:transform=move || {
+                                format!("scaleX({})", norm_pos(progress_mouse.x.get()))
+                            }
+                        />
+                        <div
+                            class="absolute origin-left h-full w-full bg-white/20"
                             style:transform=move || {
                                 format!("scaleX({})", norm_pos(progress_mouse.x.get()))
                             }

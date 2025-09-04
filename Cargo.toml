@@ -15,7 +15,16 @@ leptos_axum = { version = "0.8.6", optional = true }
 leptos_meta = { version = "0.8.5" }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 wasm-bindgen = { version = "=0.2.100", optional = true }
-web-sys = { version = "0.3.77", features = ["DomRect", "Element", "Event"] }
+web-sys = { version = "0.3.77", features = [
+    "DomRect",
+    "Element",
+    "Event",
+    "ProgressEvent",
+    "HtmlVideoElement",
+    "HtmlMediaElement",
+    "MediaStream",
+    "TimeRanges",
+] }
 leptos-use = { version = "0.16", features = [
     "use_draggable",
     "use_mouse_in_element",
