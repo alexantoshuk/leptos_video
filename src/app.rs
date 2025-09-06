@@ -40,6 +40,7 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
+        <script>0</script>
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
         <Stylesheet id="leptos" href="/pkg/leptos_video.css" />
@@ -69,12 +70,12 @@ fn HomePage() -> impl IntoView {
         <h1>"Welcome to Leptos!"</h1>
         <button on:click=on_click>"Click Me: " {count}</button>
 
-        <div class="p-1" style="width:400px; height:400px;">
-            <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
-                .to_string() />
-        // <VideoPlayer src="https://www.pexels.com/ru-ru/download/video/3150562/".to_string() />
+        <div class="p-1" style="width:1000px; height:400px;">
+            // <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
+            // .to_string()  fps=25.0 />
 
-        // <VideoPlayer src="SoftSwissPost_1080x1350.v010.mp4".to_string() />
+            <VideoPlayer src="Metallborne2.mp4".to_string() fps=25.0 />
+        // <VideoPlayer src="SoftSwissPost_1080x1350.v010.mp4".to_string() fps=25.0 />
         </div>
     }
 }
@@ -84,7 +85,7 @@ use web_sys::wasm_bindgen::convert::OptionIntoWasmAbi;
 use web_sys::MouseEvent;
 
 #[component]
-pub fn VideoPlayer(src: String) -> impl IntoView {
+pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
     let video_container_ref = NodeRef::<html::Div>::new();
     let video_ref = NodeRef::<html::Video>::new();
     let progress_ref = NodeRef::<html::Div>::new();
@@ -92,6 +93,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     let (progress, set_progress) = signal(0.0);
     let (preload_progress, set_preload_progress) = signal(0.0);
     let (hover_progress, set_hover_progress) = signal(0.0);
+    let (progress_width, set_progress_width) = signal(0.0);
     let (duration, set_duration) = signal(0.0);
     let (controls_visible, set_controls_visible) = signal(false);
     let (info, set_info) = signal(0.0);
@@ -102,20 +104,14 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     let (drag_offset, set_drag_offset) = signal(0.0);
 
     let video_container_mouse = use_mouse_in_element(video_container_ref);
-    // let progress_mouse = use_mouse_in_element(progress_ref);
 
     // Calculate seek position from mouse event
-    let norm_pos = move |client_x: f64| -> f64 {
-        if let Some(target) = progress_ref.get() {
-            let rect = target.get_bounding_client_rect();
-            let pos = (client_x - rect.left()) / rect.width();
-            pos.max(0.0).min(1.0)
-        } else {
-            0.0
-        }
+    let norm_pos = move |x: f64| -> f64 {
+        let pos = x / progress_width.get();
+        pos.max(0.0).min(1.0)
     };
 
-    let controls_hide = use_debounce_fn(
+    let controls_hide_after_delay = use_debounce_fn(
         move || {
             set_controls_visible.set(false);
         },
@@ -125,10 +121,36 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     // Handle seek (click or drag)
     let seek_to_position = move |pos: f64| {
         if let Some(video) = video_ref.get() {
-            let seek_time = pos * video.duration();
+            let d = duration.get();
+            let pos = discretize_progress(pos, d * fps);
+            let seek_time = pos * d;
             video.set_current_time(seek_time);
             set_progress.set(pos);
             set_current_time.set(seek_time);
+        }
+    };
+
+    let load_metadata = move || {
+        if let Some(video) = video_ref.get() {
+            let d = video.duration();
+            set_duration.set(d);
+        }
+    };
+
+    let preload_update = move || {
+        // log!("preload");
+        if let Some(video) = video_ref.get() {
+            let vb = video.buffered();
+            let t = current_time.get();
+            for i in (0..vb.length()).rev() {
+                let start = vb.start(i).unwrap();
+                let end = vb.end(i).unwrap();
+                // log!("buffered {i} {start}-{end} {t}");
+                if t >= start && t <= end {
+                    set_preload_progress.set(end / duration.get());
+                    break;
+                }
+            }
         }
     };
 
@@ -138,18 +160,23 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
             .initial_value(Position { x: 0.0, y: 0.0 })
             .target_offset(move |ev| (0.0, 0.0))
             .on_start(move |ev| {
-                if ev.event.pointer_type() == "touch" {
-                    if let Some(p) = progress_ref.get() {
+                if let Some(p) = progress_ref.get() {
+                    if ev.event.pointer_type() == "touch" {
                         let _ = p.focus();
                     }
+                    let x = p.offset_left() as f64;
+                    // let x = ev.event.offset_x() as f64;
+                    set_drag_offset.set(x);
+                    let pos = norm_pos(x);
+                    seek_to_position(pos);
+                    true
+                } else {
+                    false
                 }
-                let x = ev.event.x() as f64;
-                set_drag_offset.set(x);
-                let pos = norm_pos(x);
-                let pos = norm_pos(x);
-                seek_to_position(pos);
-                true
             })
+            // .on_end(move |_| {
+            //     preload_update();
+            // })
             .on_move(move |ev| {
                 let pos = norm_pos(ev.position.x + drag_offset.get());
                 seek_to_position(pos);
@@ -158,36 +185,16 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
             .prevent_default(true),
     );
 
-    let load_metadata = move || {
-        if let Some(video) = video_ref.get() {
-            let d = video.duration();
-            set_duration.set(d);
-        }
-    };
-
     let time_update = move |_| {
         if !is_dragging.get() {
             if let Some(video) = video_ref.get() {
-                let d = video.duration();
+                let d = duration.get();
                 let time = video.current_time();
                 set_current_time.set(time);
                 if d > 0.0 {
-                    set_progress.set(time / d);
+                    let pos = discretize_progress(time / d, d * fps);
+                    set_progress.set(pos);
                 }
-            }
-        }
-    };
-
-    let preload_update = move |_| {
-        if let Some(video) = video_ref.get() {
-            let n = video.buffered().length();
-            if n == 0 {
-                return;
-            }
-            let n = n - 1;
-
-            if let Ok(loaded) = video.buffered().end(n) {
-                set_preload_progress.set(loaded / duration.get())
             }
         }
     };
@@ -196,10 +203,12 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         if let Some(video) = video_ref.get() {
             if is_playing.get() {
                 let _ = video.pause();
+                set_is_playing.set(false);
             } else {
                 let _ = video.play();
+                set_is_playing.set(true);
             }
-            set_is_playing.update(|p| *p = !*p);
+            // set_is_playing.update(|p| *p = !*p);
         }
     };
 
@@ -248,14 +257,17 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
     };
 
     // Helper functions
-    let format_time = move |time: f64| {
+    fn format_time(time: f64) -> String {
         let minutes = (time / 60.0).floor() as i32;
         let seconds = (time % 60.0).floor() as i32;
         format!("{minutes:02}:{seconds:02}")
-    };
+    }
 
     create_effect(move |_| {
         load_metadata();
+        if let Some(target) = progress_ref.get() {
+            set_progress_width.set(target.get_bounding_client_rect().width());
+        }
     });
 
     // Show button on mouse movement and reset hide timer
@@ -264,7 +276,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
         let _ = video_container_mouse.y.get();
 
         set_controls_visible.set(true);
-        controls_hide();
+        controls_hide_after_delay();
     });
 
     view! {
@@ -279,68 +291,81 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                     // controls
                     playsinline
                     disablepictureinpicture
+                    controlslist="nodownload"
                     node_ref=video_ref
                     src=src
-                    preload="auto"
+                    // preload="auto"
                     class="cursor-pointer absolute size-full object-contain"
+                    on:contextmenu=move |ev| ev.prevent_default()
                     on:loadedmetadata=move |_| load_metadata()
                     on:durationchange=move |_| load_metadata()
                     on:timeupdate=time_update
                     on:click=toggle_play
-                    on:progress=preload_update
+                    on:progress=move |_| preload_update()
+                    on:canplaythrough=move |_| preload_update()
+                    on:ratechange=move |_| log!("ratechange")
+                    on:ended=move |_| set_is_playing.set(false)
                 >
                     "Your browser doesn't support HTML video."
                 </video>
             </div>
 
             // Controls
-            <div class=move || {
-                format!(
-                    "flex-none bg-gray-900 bottom-0 group-fullscreen:absolute group-fullscreen:backdrop-blur-md group-fullscreen:bg-black/70 group-fullscreen:inset-x-0 group-fullscreen:w-full group-fullscreen:pt-2 px-2 transition-opacity duration-200 {} hover:opacity-100",
-                    if is_fullscreen.get() && !controls_visible.get() {
-                        "opacity-0"
-                    } else {
-                        "opacity-100"
-                    },
-                )
-            }>
+            <div
+                tabindex="-1"
+                class=move || {
+                    format!(
+                        "flex-none not-group-fullscreen:bg-gray-900 bottom-0 px-2 group-fullscreen:absolute group-fullscreen:bg-gradient-to-t group-fullscreen:from-black group-fullscreen:inset-x-0 group-fullscreen:w-full group-fullscreen:pt-2 group-fullscreen:px-6 transition-opacity duration-200 {} focus:opacity-100 hover:opacity-100",
+                        if is_fullscreen.get() && !controls_visible.get() {
+                            "opacity-0"
+                        } else {
+                            "opacity-100"
+                        },
+                    )
+                }
+            >
                 <div class="relative">
                     // Progress bar
                     <div
                         node_ref=progress_ref
                         tabindex="-1"
-                        class="absolute outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-600 group-fullscreen:bg-white/20 cursor-pointer transform transition-all duration-200"
-                    >
-                        <div
-                            class=move || {
-                                format!(
-                                    "absolute origin-left h-full w-full bg-white/20 opacity-0 transition-opacity duration-200 {}",
-                                    if is_dragging.get() {
-                                        ""
-                                    } else {
-                                        "group-hover/progress:opacity-100"
-                                    },
-                                )
+                        class="absolute  outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-600 group-fullscreen:bg-white/20 cursor-pointer transform transition-all duration-200"
+                        // on:mousemove=move |ev| { set_hover_progress.set(ev.offset_x() as f64) }
+                        on:resize=move |_| {
+                            if let Some(target) = progress_ref.get() {
+                                set_progress_width.set(target.get_bounding_client_rect().width());
                             }
-                            style:transform=move || { format!("scaleX({})", hover_progress.get()) }
-                            on:mousemove=move |ev| {
-                                set_hover_progress.set(norm_pos(ev.client_x() as f64))
+                        }
+                    >
+
+                        <div
+                            class="absolute origin-left h-full w-full bg-white/20 transition-scale duration-200"
+                            style:transform=move || {
+                                format!("scaleX({})", preload_progress.get())
                             }
                         />
                         <div
-                            class="absolute origin-left h-full w-full bg-white/20"
+                            class=move || {
+                                format!("absolute origin-left h-full bg-white opacity-50 z-100")
+                            }
+                            // style:transform=move || { format!("scaleX({})", hover_progress.get()) }
+                            style:width=move || {
+                                format!("calc(max(20px, {}%))", 100.0 / (duration.get() * fps))
+                            }
                             style:transform=move || {
-                                format!("scaleX({})", preload_progress.get())
+                                format!("translateX({}px)", progress_width.get() * progress.get())
                             }
                         />
                         <div
                             class="absolute origin-left h-full w-full bg-blue-500"
                             style:transform=move || { format!("scaleX({})", progress.get()) }
                         />
+
                     </div>
 
+                    <div class="h-6" />
                     // Control buttons
-                    <div class="flex items-center justify-between px-4 py-3">
+                    <div class="flex items-center justify-between px-1 py-2 bottom-0">
                         // Left side
                         <div class="flex items-center space-x-4">
                             // Play/Pause button
@@ -356,7 +381,7 @@ pub fn VideoPlayer(src: String) -> impl IntoView {
                                 <span>{move || format_time(current_time.get())}</span>
                                 <span class="mx-1 text-gray-400">/</span>
                                 <span class="text-gray-400">
-                                    {move || format_time(duration.get())}
+                                    {move || format_time(duration.get())}/
                                 </span>
                             </div>
                         </div>
@@ -551,4 +576,10 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
             </svg>
         }
     }
+}
+
+fn discretize_progress(progress: f64, num_frames: f64) -> f64 {
+    progress
+    // let f = f64::floor(progress * (num_frames - 1.0));
+    // f / num_frames
 }
