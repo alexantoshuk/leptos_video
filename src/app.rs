@@ -11,8 +11,8 @@ use leptos_router::{
 };
 use leptos_use::core::Position;
 use leptos_use::{
-    use_debounce_fn, use_draggable_with_options, use_mouse_in_element, use_timeout_fn,
-    UseDraggableOptions, UseDraggableReturn,
+    use_debounce_fn, use_draggable_with_options, use_element_size, use_mouse_in_element,
+    use_timeout_fn, UseDraggableOptions,
 };
 use web_sys;
 
@@ -70,12 +70,11 @@ fn HomePage() -> impl IntoView {
         <h1>"Welcome to Leptos!"</h1>
         <button on:click=on_click>"Click Me: " {count}</button>
 
-        <div class="p-1" style="width:1000px; height:400px;">
+        <div style="  width:400px; height:400px;">
             // <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
             // .to_string()  fps=25.0 />
 
             <VideoPlayer src="Metallborne2.mp4".to_string() fps=25.0 />
-        // <VideoPlayer src="SoftSwissPost_1080x1350.v010.mp4".to_string() fps=25.0 />
         </div>
     }
 }
@@ -86,14 +85,13 @@ use web_sys::MouseEvent;
 
 #[component]
 pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
-    let video_container_ref = NodeRef::<html::Div>::new();
+    let container_ref = NodeRef::<html::Div>::new();
     let video_ref = NodeRef::<html::Video>::new();
     let progress_ref = NodeRef::<html::Div>::new();
     let (is_playing, set_is_playing) = signal(false);
     let (progress, set_progress) = signal(0.0);
     let (preload_progress, set_preload_progress) = signal(0.0);
     let (hover_progress, set_hover_progress) = signal(0.0);
-    let (progress_width, set_progress_width) = signal(0.0);
     let (duration, set_duration) = signal(0.0);
     let (controls_visible, set_controls_visible) = signal(false);
     let (info, set_info) = signal(0.0);
@@ -103,7 +101,10 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
     let (is_fullscreen, set_is_fullscreen) = signal(false);
     let (drag_offset, set_drag_offset) = signal(0.0);
 
-    let video_container_mouse = use_mouse_in_element(video_container_ref);
+    let container_mouse = use_mouse_in_element(container_ref);
+    let progress_width = use_element_size(progress_ref).width;
+    let total_frames = move || duration.get() * fps;
+    let cursor_width = move || (progress_width.get() / total_frames()).max(2.0);
 
     // Calculate seek position from mouse event
     let norm_pos = move |x: f64| -> f64 {
@@ -118,22 +119,40 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
         2000.0, // 2 seconds
     );
 
-    // Handle seek (click or drag)
-    let seek_to_position = move |pos: f64| {
+    let seek_to_position = move |pos: f64| -> bool {
         if let Some(video) = video_ref.get() {
             let d = duration.get();
-            let pos = discretize_progress(pos, d * fps);
+            if d <= 0.0 {
+                return false;
+            }
             let seek_time = pos * d;
             video.set_current_time(seek_time);
-            set_progress.set(pos);
             set_current_time.set(seek_time);
+
+            let pos = discretize_progress(pos, d * fps);
+            let seek_time = pos * d;
+            set_progress.set(pos);
+
+            true
+        } else {
+            false
         }
+    };
+
+    let stop = move || {
+        if let Some(video) = video_ref.get() {
+            video.set_current_time(0.0);
+        }
+        set_current_time.set(0.0);
+        set_progress.set(0.0);
     };
 
     let load_metadata = move || {
         if let Some(video) = video_ref.get() {
             let d = video.duration();
-            set_duration.set(d);
+            if d.is_finite() {
+                set_duration.set(d);
+            }
         }
     };
 
@@ -154,7 +173,13 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
         }
     };
 
-    let UseDraggableReturn { is_dragging, .. } = use_draggable_with_options(
+    let is_ended = move || {
+        let n = total_frames();
+        let f = cur_frame(progress.get(), n);
+        f == n - 1.0
+    };
+
+    let is_dragging = use_draggable_with_options(
         progress_ref,
         UseDraggableOptions::default()
             .initial_value(Position { x: 0.0, y: 0.0 })
@@ -164,12 +189,10 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
                     if ev.event.pointer_type() == "touch" {
                         let _ = p.focus();
                     }
-                    let x = p.offset_left() as f64;
-                    // let x = ev.event.offset_x() as f64;
+                    let x = ev.event.offset_x() as f64;
                     set_drag_offset.set(x);
                     let pos = norm_pos(x);
-                    seek_to_position(pos);
-                    true
+                    seek_to_position(pos)
                 } else {
                     false
                 }
@@ -179,11 +202,13 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
             // })
             .on_move(move |ev| {
                 let pos = norm_pos(ev.position.x + drag_offset.get());
+                set_controls_visible.set(true);
                 seek_to_position(pos);
             })
             // .stop_propagation(true)
             .prevent_default(true),
-    );
+    )
+    .is_dragging;
 
     let time_update = move |_| {
         if !is_dragging.get() {
@@ -205,10 +230,12 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
                 let _ = video.pause();
                 set_is_playing.set(false);
             } else {
+                if is_ended() {
+                    stop();
+                }
                 let _ = video.play();
                 set_is_playing.set(true);
             }
-            // set_is_playing.update(|p| *p = !*p);
         }
     };
 
@@ -241,7 +268,7 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
 
     let toggle_fullscreen = move |ev: MouseEvent| {
         ev.stop_propagation();
-        if let Some(el) = video_container_ref.get() {
+        if let Some(el) = container_ref.get() {
             if is_fullscreen.get() {
                 document().exit_fullscreen();
             } else {
@@ -251,37 +278,26 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
     };
 
     let fullscreenchange = move |_| {
-        if let Some(el) = video_container_ref.get() {
+        if let Some(el) = container_ref.get() {
             set_is_fullscreen.set(document().fullscreen_element() == Some(el.into()));
         }
     };
 
-    // Helper functions
-    fn format_time(time: f64) -> String {
-        let minutes = (time / 60.0).floor() as i32;
-        let seconds = (time % 60.0).floor() as i32;
-        format!("{minutes:02}:{seconds:02}")
-    }
-
-    create_effect(move |_| {
+    Effect::new(move |_| {
         load_metadata();
-        if let Some(target) = progress_ref.get() {
-            set_progress_width.set(target.get_bounding_client_rect().width());
-        }
     });
 
     // Show button on mouse movement and reset hide timer
-    create_effect(move |_| {
-        let _ = video_container_mouse.x.get(); // Track mouse movement
-        let _ = video_container_mouse.y.get();
-
+    Effect::new(move |_| {
+        let _ = container_mouse.x.get(); // Track mouse movement
+        let _ = container_mouse.y.get();
         set_controls_visible.set(true);
         controls_hide_after_delay();
     });
 
     view! {
         <div
-            node_ref=video_container_ref
+            node_ref=container_ref
             class="size-full flex bg-black flex-col overflow-hidden shadow-xl touch-none group"
             on:fullscreenchange=fullscreenchange
         >
@@ -294,7 +310,7 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
                     controlslist="nodownload"
                     node_ref=video_ref
                     src=src
-                    // preload="auto"
+                    // preload="none"
                     class="cursor-pointer absolute size-full object-contain"
                     on:contextmenu=move |ev| ev.prevent_default()
                     on:loadedmetadata=move |_| load_metadata()
@@ -329,43 +345,31 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
                     <div
                         node_ref=progress_ref
                         tabindex="-1"
-                        class="absolute  outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-600 group-fullscreen:bg-white/20 cursor-pointer transform transition-all duration-200"
-                        // on:mousemove=move |ev| { set_hover_progress.set(ev.offset_x() as f64) }
-                        on:resize=move |_| {
-                            if let Some(target) = progress_ref.get() {
-                                set_progress_width.set(target.get_bounding_client_rect().width());
-                            }
-                        }
+                        class="absolute outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 bg-gray-600 group-fullscreen:bg-white/20 cursor-pointer transform transition-all duration-200"
                     >
-
                         <div
-                            class="absolute origin-left h-full w-full bg-white/20 transition-scale duration-200"
+                            class="absolute origin-left h-full w-full bg-white/20 transition-scale duration-200 pointer-events-none"
                             style:transform=move || {
                                 format!("scaleX({})", preload_progress.get())
                             }
                         />
+
                         <div
-                            class=move || {
-                                format!("absolute origin-left h-full bg-white opacity-50 z-100")
-                            }
-                            // style:transform=move || { format!("scaleX({})", hover_progress.get()) }
-                            style:width=move || {
-                                format!("calc(max(20px, {}%))", 100.0 / (duration.get() * fps))
-                            }
+                            class="absolute origin-left h-full w-full bg-blue-500 pointer-events-none"
+                            style:transform=move || { format!("scaleX({})", progress.get()) }
+                        />
+
+                        <div
+                            class="absolute origin-left h-full bg-blue-300 pointer-events-none"
+                            style:width=move || { format!("{}px", cursor_width()) }
                             style:transform=move || {
                                 format!("translateX({}px)", progress_width.get() * progress.get())
                             }
                         />
-                        <div
-                            class="absolute origin-left h-full w-full bg-blue-500"
-                            style:transform=move || { format!("scaleX({})", progress.get()) }
-                        />
-
                     </div>
 
-                    <div class="h-6" />
                     // Control buttons
-                    <div class="flex items-center justify-between px-1 py-2 bottom-0">
+                    <div class="flex items-center justify-between px-1 pb-2 pt-4 bottom-0">
                         // Left side
                         <div class="flex items-center space-x-4">
                             // Play/Pause button
@@ -578,8 +582,22 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
     }
 }
 
-fn discretize_progress(progress: f64, num_frames: f64) -> f64 {
-    progress
-    // let f = f64::floor(progress * (num_frames - 1.0));
-    // f / num_frames
+fn cur_frame(progress: f64, total_frames: f64) -> f64 {
+    f64::floor(progress * total_frames)
+}
+
+fn discretize_progress(progress: f64, total_frames: f64) -> f64 {
+    if total_frames < 1.0 {
+        0.0
+    } else {
+        let last_frame = total_frames - 1.0;
+        let f = cur_frame(progress, total_frames);
+        f.min(last_frame) / total_frames
+    }
+}
+
+fn format_time(time: f64) -> String {
+    let minutes = (time / 60.0).floor() as i32;
+    let seconds = (time % 60.0).floor() as i32;
+    format!("{minutes:02}:{seconds:02}")
 }
