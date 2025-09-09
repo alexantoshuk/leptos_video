@@ -59,6 +59,12 @@ pub fn App() -> impl IntoView {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Dragging {
+    Start,
+    Move,
+    None,
+}
 /// Renders the home page of your application.
 #[component]
 fn HomePage() -> impl IntoView {
@@ -84,17 +90,20 @@ use web_sys::wasm_bindgen::convert::OptionIntoWasmAbi;
 use web_sys::MouseEvent;
 
 #[component]
-pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
+pub fn VideoPlayer(
+    #[prop(into)] src: Signal<String>,
+    #[prop(into)] fps: Signal<f64>,
+) -> impl IntoView {
     let container_ref = NodeRef::<html::Div>::new();
     let video_ref = NodeRef::<html::Video>::new();
     let progress_ref = NodeRef::<html::Div>::new();
     let (is_playing, set_is_playing) = signal(false);
+    let (is_dragging, set_is_dragging) = signal(Dragging::None);
     let (progress, set_progress) = signal(0.0);
+    let (frame, set_frame) = signal(0.0);
     let (preload_progress, set_preload_progress) = signal(0.0);
-    let (hover_progress, set_hover_progress) = signal(0.0);
     let (duration, set_duration) = signal(0.0);
     let (controls_visible, set_controls_visible) = signal(false);
-    let (info, set_info) = signal(0.0);
     let (current_time, set_current_time) = signal(0.0);
     let (is_muted, set_is_muted) = signal(false);
     let (volume, set_volume) = signal(1.0);
@@ -102,15 +111,7 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
     let (drag_offset, set_drag_offset) = signal(0.0);
 
     let container_mouse = use_mouse_in_element(container_ref);
-    let progress_width = use_element_size(progress_ref).width;
-    let total_frames = move || duration.get() * fps;
-    let cursor_width = move || (progress_width.get() / total_frames()).max(2.0);
-
-    // Calculate seek position from mouse event
-    let norm_pos = move |x: f64| -> f64 {
-        let pos = x / progress_width.get();
-        pos.max(0.0).min(1.0)
-    };
+    let total_frames = move || duration.get() * fps.get();
 
     let controls_hide_after_delay = use_debounce_fn(
         move || {
@@ -119,23 +120,37 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
         2000.0, // 2 seconds
     );
 
-    let seek_to_position = move |pos: f64| -> bool {
+    let seek_to_position = move |pos: f64| {
         if let Some(video) = video_ref.get() {
             let d = duration.get();
             if d <= 0.0 {
-                return false;
+                return;
             }
-            let seek_time = pos * d;
-            video.set_current_time(seek_time);
-            set_current_time.set(seek_time);
 
-            let pos = discretize_progress(pos, d * fps);
-            let seek_time = pos * d;
+            let time = pos * d;
+            video.set_current_time(time);
+
+            set_current_time.set(time);
+            let pos = discretize_progress(pos, d * fps.get());
             set_progress.set(pos);
+        }
+    };
 
-            true
-        } else {
-            false
+    let time_update = move |_| {
+        if is_dragging.get() == Dragging::None {
+            if let Some(video) = video_ref.get() {
+                let d = duration.get();
+                if d <= 0.0 {
+                    return;
+                }
+
+                let time = video.current_time();
+                let pos = time / d;
+
+                set_current_time.set(time);
+                let pos = discretize_progress(pos, d * fps.get());
+                set_progress.set(pos);
+            }
         }
     };
 
@@ -179,50 +194,44 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
         f == n - 1.0
     };
 
-    let is_dragging = use_draggable_with_options(
+    use_draggable_with_options(
         progress_ref,
         UseDraggableOptions::default()
             .initial_value(Position { x: 0.0, y: 0.0 })
             .target_offset(move |ev| (0.0, 0.0))
             .on_start(move |ev| {
                 if let Some(p) = progress_ref.get() {
+                    set_is_dragging.set(Dragging::Start);
+
                     if ev.event.pointer_type() == "touch" {
                         let _ = p.focus();
                     }
+
                     let x = ev.event.offset_x() as f64;
                     set_drag_offset.set(x);
-                    let pos = norm_pos(x);
-                    seek_to_position(pos)
+                    let pos = (x / p.client_width() as f64).max(0.0).min(1.0);
+                    seek_to_position(pos);
+                    true
                 } else {
+                    set_is_dragging.set(Dragging::None);
                     false
                 }
             })
-            // .on_end(move |_| {
-            //     preload_update();
-            // })
+            .on_end(move |_| {
+                set_is_dragging.set(Dragging::None);
+            })
             .on_move(move |ev| {
-                let pos = norm_pos(ev.position.x + drag_offset.get());
-                set_controls_visible.set(true);
-                seek_to_position(pos);
+                if let Some(p) = progress_ref.get() {
+                    set_is_dragging.set(Dragging::Move);
+                    let x = ev.position.x + drag_offset.get();
+                    let pos = (x / p.client_width() as f64).max(0.0).min(1.0);
+                    set_controls_visible.set(true);
+                    seek_to_position(pos);
+                }
             })
             // .stop_propagation(true)
             .prevent_default(true),
-    )
-    .is_dragging;
-
-    let time_update = move |_| {
-        if !is_dragging.get() {
-            if let Some(video) = video_ref.get() {
-                let d = duration.get();
-                let time = video.current_time();
-                set_current_time.set(time);
-                if d > 0.0 {
-                    let pos = discretize_progress(time / d, d * fps);
-                    set_progress.set(pos);
-                }
-            }
-        }
-    };
+    );
 
     let toggle_play = move |_| {
         if let Some(video) = video_ref.get() {
@@ -313,14 +322,20 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
                     // preload="none"
                     class="cursor-pointer absolute size-full object-contain"
                     on:contextmenu=move |ev| ev.prevent_default()
-                    on:loadedmetadata=move |_| load_metadata()
+                    on:loadedmetadata=move |m| {
+                        log!("{:?}",m);
+                        load_metadata()
+                    }
                     on:durationchange=move |_| load_metadata()
                     on:timeupdate=time_update
                     on:click=toggle_play
                     on:progress=move |_| preload_update()
                     on:canplaythrough=move |_| preload_update()
                     on:ratechange=move |_| log!("ratechange")
-                    on:ended=move |_| set_is_playing.set(false)
+                    on:ended=move |_| {
+                        // log!("ended");
+                        set_is_playing.set(false)
+                    }
                 >
                     "Your browser doesn't support HTML video."
                 </video>
@@ -360,11 +375,12 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
                         />
 
                         <div
-                            class="absolute origin-left h-full bg-blue-300 pointer-events-none"
-                            style:width=move || { format!("{}px", cursor_width()) }
+                            class="absolute origin-left h-full w-full bg-blue-300 pointer-events-none"
+
                             style:transform=move || {
-                                format!("translateX({}px)", progress_width.get() * progress.get())
+                                format!("translateX({}%) scaleX({})", progress.get()*100.0, 1.0 / total_frames())
                             }
+
                         />
                     </div>
 
@@ -382,10 +398,18 @@ pub fn VideoPlayer(src: String, fps: f64) -> impl IntoView {
 
                             // Time display
                             <div class="flex items-center text-white text-sm font-mono">
-                                <span>{move || format_time(current_time.get())}</span>
+                                <span>
+                                    {move || timecode(
+                                        cur_frame(progress.get(), duration.get() * fps.get()),
+                                        fps.get(),
+                                    )}
+                                </span>
                                 <span class="mx-1 text-gray-400">/</span>
                                 <span class="text-gray-400">
-                                    {move || format_time(duration.get())}/
+                                    {move || timecode(
+                                        cur_frame(progress.get(), duration.get() * fps.get()),
+                                        fps.get(),
+                                    )}
                                 </span>
                             </div>
                         </div>
@@ -448,7 +472,7 @@ fn play_pause_icon(play: bool) -> impl IntoView {
                     fill="currentColor"
                 ></path>
             </svg>
-        }
+        }.into_any()
     } else {
         view! {
             <svg
@@ -475,7 +499,7 @@ fn play_pause_icon(play: bool) -> impl IntoView {
                     fill="currentColor"
                 ></path>
             </svg>
-        }
+        }.into_any()
     }
 }
 
@@ -498,7 +522,7 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 <line x1="23" y1="9" x2="17" y2="15"></line>
                 <line x1="17" y1="9" x2="23" y2="15"></line>
             </svg>
-        }
+        }.into_any()
     } else if volume < 0.5 {
         view! {
             <svg
@@ -516,7 +540,7 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
             </svg>
-        }
+        }.into_any()
     } else {
         view! {
             <svg
@@ -534,7 +558,7 @@ fn volume_icon(volume: f64) -> impl IntoView {
                 <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
             </svg>
-        }
+        }.into_any()
     }
 }
 
@@ -558,7 +582,7 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
                 <line x1="14" y1="10" x2="21" y2="3"></line>
                 <line x1="3" y1="21" x2="10" y2="14"></line>
             </svg>
-        }
+        }.into_any()
     } else {
         view! {
             <svg
@@ -578,7 +602,7 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
                 <line x1="21" y1="3" x2="14" y2="10"></line>
                 <line x1="3" y1="21" x2="10" y2="14"></line>
             </svg>
-        }
+        }.into_any()
     }
 }
 
@@ -594,6 +618,16 @@ fn discretize_progress(progress: f64, total_frames: f64) -> f64 {
         let f = cur_frame(progress, total_frames);
         f.min(last_frame) / total_frames
     }
+}
+
+fn timecode(frame: f64, fps: f64) -> String {
+    let time = frame / fps;
+    let hours = (time / 360.0).floor() as i32;
+    let minutes = (time / 60.0).floor() as i32;
+    let seconds = (time % 60.0).floor() as i32;
+    let frame = (frame % fps) as i32;
+    let pad = (fps as i32).to_string().len();
+    format!("{hours:02}:{minutes:02}:{seconds:02}:{frame:0>pad$}")
 }
 
 fn format_time(time: f64) -> String {
