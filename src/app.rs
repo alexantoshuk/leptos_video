@@ -76,11 +76,11 @@ fn HomePage() -> impl IntoView {
         <h1>"Welcome to Leptos!"</h1>
         <button on:click=on_click>"Click Me: " {count}</button>
 
-        <div style="  width:400px; height:400px;">
+        <div style="  width:800px; height:400px;">
             // <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
             // .to_string()  fps=25.0 />
 
-            <VideoPlayer src="Metallborne2.mp4".to_string() fps=25.0 />
+            <VideoPlayer src="Metallborne3.mp4".to_string() fps=25.0 />
         </div>
     }
 }
@@ -99,19 +99,16 @@ pub fn VideoPlayer(
     let progress_ref = NodeRef::<html::Div>::new();
     let (is_playing, set_is_playing) = signal(false);
     let (is_dragging, set_is_dragging) = signal(Dragging::None);
-    let (progress, set_progress) = signal(0.0);
     let (frame, set_frame) = signal(0.0);
+    let (end_frame, set_end_frame) = signal(0.0);
     let (preload_progress, set_preload_progress) = signal(0.0);
-    let (duration, set_duration) = signal(0.0);
     let (controls_visible, set_controls_visible) = signal(false);
-    let (current_time, set_current_time) = signal(0.0);
     let (is_muted, set_is_muted) = signal(false);
     let (volume, set_volume) = signal(1.0);
     let (is_fullscreen, set_is_fullscreen) = signal(false);
     let (drag_offset, set_drag_offset) = signal(0.0);
 
     let container_mouse = use_mouse_in_element(container_ref);
-    let total_frames = move || duration.get() * fps.get();
 
     let controls_hide_after_delay = use_debounce_fn(
         move || {
@@ -122,34 +119,26 @@ pub fn VideoPlayer(
 
     let seek_to_position = move |pos: f64| {
         if let Some(video) = video_ref.get() {
-            let d = duration.get();
-            if d <= 0.0 {
-                return;
-            }
+            let d = video.duration();
+            let end = end_frame.get();
+            let total_frames = end + 1.0;
+            set_frame.set((pos * total_frames).floor().min(end));
 
             let time = pos * d;
             video.set_current_time(time);
-
-            set_current_time.set(time);
-            let pos = discretize_progress(pos, d * fps.get());
-            set_progress.set(pos);
         }
     };
 
     let time_update = move |_| {
         if is_dragging.get() == Dragging::None {
             if let Some(video) = video_ref.get() {
-                let d = duration.get();
-                if d <= 0.0 {
-                    return;
-                }
-
+                let d = video.duration();
                 let time = video.current_time();
                 let pos = time / d;
 
-                set_current_time.set(time);
-                let pos = discretize_progress(pos, d * fps.get());
-                set_progress.set(pos);
+                let end = end_frame.get();
+                let total_frames = end + 1.0;
+                set_frame.set((pos * total_frames).floor().min(end));
             }
         }
     };
@@ -158,15 +147,15 @@ pub fn VideoPlayer(
         if let Some(video) = video_ref.get() {
             video.set_current_time(0.0);
         }
-        set_current_time.set(0.0);
-        set_progress.set(0.0);
+        set_frame.set(0.0);
     };
 
     let load_metadata = move || {
         if let Some(video) = video_ref.get() {
             let d = video.duration();
             if d.is_finite() {
-                set_duration.set(d);
+                let total_frames = d * fps.get();
+                set_end_frame.set((total_frames - 1.0).max(0.0));
             }
         }
     };
@@ -174,25 +163,22 @@ pub fn VideoPlayer(
     let preload_update = move || {
         // log!("preload");
         if let Some(video) = video_ref.get() {
+            let d = video.duration();
             let vb = video.buffered();
-            let t = current_time.get();
+            let time = video.current_time();
             for i in (0..vb.length()).rev() {
                 let start = vb.start(i).unwrap();
                 let end = vb.end(i).unwrap();
                 // log!("buffered {i} {start}-{end} {t}");
-                if t >= start && t <= end {
-                    set_preload_progress.set(end / duration.get());
+                if time >= start && time <= end {
+                    set_preload_progress.set(end / d);
                     break;
                 }
             }
         }
     };
 
-    let is_ended = move || {
-        let n = total_frames();
-        let f = cur_frame(progress.get(), n);
-        f == n - 1.0
-    };
+    let is_ended = move || frame.get() == end_frame.get();
 
     use_draggable_with_options(
         progress_ref,
@@ -371,14 +357,15 @@ pub fn VideoPlayer(
 
                         <div
                             class="absolute origin-left h-full w-full bg-blue-500 pointer-events-none"
-                            style:transform=move || { format!("scaleX({})", progress.get()) }
+                            style:transform=move || { format!("scaleX({})", frame.get()/(end_frame.get()+1.0)) }
                         />
 
                         <div
                             class="absolute origin-left h-full w-full bg-blue-300 pointer-events-none"
 
                             style:transform=move || {
-                                format!("translateX({}%) scaleX({})", progress.get()*100.0, 1.0 / total_frames())
+                                let total_frames = end_frame.get()+1.0;
+                                format!("translateX({}%) scaleX({})", 100.0*frame.get()/total_frames, 1.0 / total_frames)
                             }
 
                         />
@@ -400,14 +387,14 @@ pub fn VideoPlayer(
                             <div class="flex items-center text-white text-sm font-mono">
                                 <span>
                                     {move || timecode(
-                                        cur_frame(progress.get(), duration.get() * fps.get()),
+                                             frame.get(),
                                         fps.get(),
                                     )}
                                 </span>
                                 <span class="mx-1 text-gray-400">/</span>
                                 <span class="text-gray-400">
                                     {move || timecode(
-                                        cur_frame(progress.get(), duration.get() * fps.get()),
+                                        frame.get(),
                                         fps.get(),
                                     )}
                                 </span>
@@ -606,20 +593,6 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
     }
 }
 
-fn cur_frame(progress: f64, total_frames: f64) -> f64 {
-    f64::floor(progress * total_frames)
-}
-
-fn discretize_progress(progress: f64, total_frames: f64) -> f64 {
-    if total_frames < 1.0 {
-        0.0
-    } else {
-        let last_frame = total_frames - 1.0;
-        let f = cur_frame(progress, total_frames);
-        f.min(last_frame) / total_frames
-    }
-}
-
 fn timecode(frame: f64, fps: f64) -> String {
     let time = frame / fps;
     let hours = (time / 360.0).floor() as i32;
@@ -628,10 +601,4 @@ fn timecode(frame: f64, fps: f64) -> String {
     let frame = (frame % fps) as i32;
     let pad = (fps as i32).to_string().len();
     format!("{hours:02}:{minutes:02}:{seconds:02}:{frame:0>pad$}")
-}
-
-fn format_time(time: f64) -> String {
-    let minutes = (time / 60.0).floor() as i32;
-    let seconds = (time % 60.0).floor() as i32;
-    format!("{minutes:02}:{seconds:02}")
 }
