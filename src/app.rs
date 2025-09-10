@@ -3,7 +3,7 @@ use std::any::Any;
 use leptos::ev::{DragEvent, Event};
 use leptos::logging::log;
 use leptos::prelude::*;
-use leptos::wasm_bindgen::JsCast;
+use leptos::reactive::owner::StoredValue;
 use leptos_meta::{provide_meta_context, MetaTags, Stylesheet, Title};
 use leptos_router::{
     components::{Route, Router, Routes},
@@ -80,7 +80,7 @@ fn HomePage() -> impl IntoView {
             // <VideoPlayer src="https://download.blender.org/peach/bigbuckbunny_movies/BigBuckBunny_640x360.m4v"
             // .to_string()  fps=25.0 />
 
-            <VideoPlayer src="Metallborne3.mp4".to_string() fps=25.0 />
+            <VideoPlayer src="Metallborne3_.mp4".to_string() fps=25.0 />
         </div>
     }
 }
@@ -106,7 +106,7 @@ pub fn VideoPlayer(
     let (is_muted, set_is_muted) = signal(false);
     let (volume, set_volume) = signal(1.0);
     let (is_fullscreen, set_is_fullscreen) = signal(false);
-    let (drag_offset, set_drag_offset) = signal(0.0);
+    // let (drag_offset, set_drag_offset) = signal(0.0);
 
     let container_mouse = use_mouse_in_element(container_ref);
 
@@ -117,14 +117,21 @@ pub fn VideoPlayer(
         2000.0, // 2 seconds
     );
 
-    let seek_to_position = move |pos: f64| {
+    let seek_to_pos = move |pos: f64| {
         if let Some(video) = video_ref.get() {
-            let d = video.duration();
             let end = end_frame.get();
-            let total_frames = end + 1.0;
-            set_frame.set((pos * total_frames).floor().min(end));
+            let frame = frame_from_pos(pos, end);
+            set_frame.set(frame);
+            let time = frame / fps.get();
+            video.set_current_time(time);
+        }
+    };
 
-            let time = pos * d;
+    let seek_to_frame = move |frame: f64| {
+        if let Some(video) = video_ref.get() {
+            let end = end_frame.get();
+            set_frame.set(frame);
+            let time = frame / fps.get();
             video.set_current_time(time);
         }
     };
@@ -143,19 +150,13 @@ pub fn VideoPlayer(
         }
     };
 
-    let stop = move || {
-        if let Some(video) = video_ref.get() {
-            video.set_current_time(0.0);
-        }
-        set_frame.set(0.0);
-    };
-
     let load_metadata = move || {
         if let Some(video) = video_ref.get() {
             let d = video.duration();
             if d.is_finite() {
-                let total_frames = d * fps.get();
-                set_end_frame.set((total_frames - 1.0).max(0.0));
+                // let total_frames = f64::floor(d * fps.get());
+                // set_end_frame.set((total_frames - 1.0).max(0.0));
+                set_end_frame.set(f64::floor(d * fps.get()));
             }
         }
     };
@@ -180,6 +181,50 @@ pub fn VideoPlayer(
 
     let is_ended = move || frame.get() == end_frame.get();
 
+    let stop = move || {
+        if let Some(video) = video_ref.get() {
+            video.set_current_time(0.0);
+            set_frame.set(0.0);
+        }
+    };
+
+    let play = move || {
+        if let Some(video) = video_ref.get() {
+            if is_ended() {
+                stop();
+            }
+            set_is_playing.set(true);
+            video.play();
+        }
+    };
+
+    let pause = move || {
+        if let Some(video) = video_ref.get() {
+            set_is_playing.set(false);
+            video.pause();
+        }
+    };
+
+    let next_frame = move || {
+        seek_to_frame(frame.get() + 1.0);
+    };
+
+    let prev_frame = move || {
+        seek_to_frame(frame.get() - 1.0);
+    };
+
+    let toggle_play = move |_| {
+        if let Some(video) = video_ref.get() {
+            if is_playing.get() {
+                pause();
+            } else {
+                play();
+            }
+        }
+    };
+
+    let drag_offset = StoredValue::new(0.0);
+    let is_played_before_drag = StoredValue::new(false);
     use_draggable_with_options(
         progress_ref,
         UseDraggableOptions::default()
@@ -187,16 +232,23 @@ pub fn VideoPlayer(
             .target_offset(move |ev| (0.0, 0.0))
             .on_start(move |ev| {
                 if let Some(p) = progress_ref.get() {
-                    set_is_dragging.set(Dragging::Start);
-
                     if ev.event.pointer_type() == "touch" {
                         let _ = p.focus();
                     }
+                    if is_playing.get() {
+                        is_played_before_drag.set_value(true);
+                        pause();
+                    } else {
+                        is_played_before_drag.set_value(false);
+                    }
+
+                    set_is_dragging.set(Dragging::Start);
 
                     let x = ev.event.offset_x() as f64;
-                    set_drag_offset.set(x);
+                    // set_drag_offset.set(x);
+                    drag_offset.set_value(x);
                     let pos = (x / p.client_width() as f64).max(0.0).min(1.0);
-                    seek_to_position(pos);
+                    seek_to_pos(pos);
                     true
                 } else {
                     set_is_dragging.set(Dragging::None);
@@ -205,32 +257,29 @@ pub fn VideoPlayer(
             })
             .on_end(move |_| {
                 set_is_dragging.set(Dragging::None);
+                if is_played_before_drag.get_value() {
+                    play();
+                }
             })
             .on_move(move |ev| {
                 if let Some(p) = progress_ref.get() {
                     set_is_dragging.set(Dragging::Move);
-                    let x = ev.position.x + drag_offset.get();
+                    let x = ev.position.x + drag_offset.get_value();
                     let pos = (x / p.client_width() as f64).max(0.0).min(1.0);
                     set_controls_visible.set(true);
-                    seek_to_position(pos);
+                    seek_to_pos(pos);
                 }
             })
             // .stop_propagation(true)
             .prevent_default(true),
     );
 
-    let toggle_play = move |_| {
-        if let Some(video) = video_ref.get() {
-            if is_playing.get() {
-                let _ = video.pause();
-                set_is_playing.set(false);
-            } else {
-                if is_ended() {
-                    stop();
-                }
-                let _ = video.play();
-                set_is_playing.set(true);
-            }
+    let handle_keydown = move |ev: leptos::ev::KeyboardEvent| {
+        ev.stop_propagation();
+        match ev.key().as_str() {
+            "ArrowLeft" => prev_frame(),
+            "ArrowRight" => next_frame(),
+            _ => (),
         }
     };
 
@@ -295,6 +344,7 @@ pub fn VideoPlayer(
             node_ref=container_ref
             class="size-full flex bg-black flex-col overflow-hidden shadow-xl touch-none group"
             on:fullscreenchange=fullscreenchange
+            on:keydown=handle_keydown
         >
             // Video element
             <div class="relative flex-auto m-[1px] group-fullscreen:m-0">
@@ -318,11 +368,9 @@ pub fn VideoPlayer(
                     on:progress=move |_| preload_update()
                     on:canplaythrough=move |_| preload_update()
                     on:ratechange=move |_| log!("ratechange")
-                    on:ended=move |_| {
-                        // log!("ended");
-                        set_is_playing.set(false)
-                    }
+                    on:ended=move |_| { set_is_playing.set(false) }
                 >
+
                     "Your browser doesn't support HTML video."
                 </video>
             </div>
@@ -341,6 +389,7 @@ pub fn VideoPlayer(
                     )
                 }
             >
+
                 <div class="relative">
                     // Progress bar
                     <div
@@ -357,18 +406,24 @@ pub fn VideoPlayer(
 
                         <div
                             class="absolute origin-left h-full w-full bg-blue-500 pointer-events-none"
-                            style:transform=move || { format!("scaleX({})", frame.get()/(end_frame.get()+1.0)) }
+                            style:transform=move || {
+                                format!("scaleX({})", frame.get() / (end_frame.get() + 1.0))
+                            }
                         />
 
                         <div
                             class="absolute origin-left h-full w-full bg-blue-300 pointer-events-none"
 
                             style:transform=move || {
-                                let total_frames = end_frame.get()+1.0;
-                                format!("translateX({}%) scaleX({})", 100.0*frame.get()/total_frames, 1.0 / total_frames)
+                                let total_frames = end_frame.get() + 1.0;
+                                format!(
+                                    "translateX({}%) scaleX({})",
+                                    100.0 * frame.get() / total_frames,
+                                    1.0 / total_frames,
+                                )
                             }
-
                         />
+
                     </div>
 
                     // Control buttons
@@ -385,18 +440,10 @@ pub fn VideoPlayer(
 
                             // Time display
                             <div class="flex items-center text-white text-sm font-mono">
-                                <span>
-                                    {move || timecode(
-                                             frame.get(),
-                                        fps.get(),
-                                    )}
-                                </span>
+                                <span>{move || timecode(frame.get(), fps.get())}</span>
                                 <span class="mx-1 text-gray-400">/</span>
                                 <span class="text-gray-400">
-                                    {move || timecode(
-                                        frame.get(),
-                                        fps.get(),
-                                    )}
+                                    {move || timecode(frame.get(), fps.get())}
                                 </span>
                             </div>
                         </div>
@@ -591,6 +638,21 @@ fn fullscreen_icon(fullscreen: bool) -> impl IntoView {
             </svg>
         }.into_any()
     }
+}
+
+fn frame_from_pos(pos: f64, end_frame: f64) -> f64 {
+    let total_frames = end_frame + 1.0;
+    (pos * total_frames).floor().min(end_frame)
+}
+
+fn time_from_frame(frame: f64, end_frame: f64, total_time: f64) -> f64 {
+    let total_frames = end_frame + 1.0;
+    let pos = (frame) / total_frames;
+    let time = pos * total_time;
+    log!("frame: {frame}");
+    log!("time: {time}");
+    log!("total_time: {total_time}");
+    time
 }
 
 fn timecode(frame: f64, fps: f64) -> String {
