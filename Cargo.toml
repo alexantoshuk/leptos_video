@@ -84,8 +84,8 @@ tailwind-input-file = "./style/input.css"
 assets-dir = "public"
 
 # The IP and port (ex: 127.0.0.1:3000) where the server serves the content. Use it in your server setup.
-# site-addr = "127.0.0.1:3000"
-site-addr = "192.168.1.37:3000"
+site-addr = "127.0.0.1:3000"
+# site-addr = "192.168.1.37:3000"
 # site-addr = "192.168.1.10:3000"
 
 # The port to use for automatic reload monitoring
