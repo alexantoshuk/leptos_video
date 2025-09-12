@@ -35,6 +35,8 @@ leptos-use = { version = "0.16", features = [
     "on_click_outside",
 
 ] }
+leptos_icons = "0.7.0"
+
 
 [features]
 hydrate = ["leptos/hydrate", "dep:console_error_panic_hook", "dep:wasm-bindgen"]
