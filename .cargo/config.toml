@@ -6,3 +6,5 @@ rustflags = ["-Csymbol-mangling-version=v0"]
 
 # [target.wasm32-unknown-unknown]
 # rustflags = ["--cfg", "erase_components"]
+[build]
+rustflags = ["--cfg=erase_components"]

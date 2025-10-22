@@ -4,24 +4,8 @@ use leptos::prelude::*;
 #[component]
 pub fn Play() -> impl IntoView {
     view! {
-        <svg
-            class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            stroke="currentColor"
-            fill="none"
-            role="graphics-symbol"
-        >
-            <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-            <path
-                d="M6 4v16a1 1 0 0 0 1.524 .852l13 -8a1 1 0 0 0 0 -1.704l-13 -8a1 1 0 0 0 -1.524 .852z"
-                stroke-width="0"
-                fill="currentColor"
-            ></path>
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8.133 5.105 18.63 11.35a.75.75 0 0 1 0 1.289L8.135 18.894A.75.75 0 0 1 7 18.25V5.75a.75.75 0 0 1 1.133-.645" />
         </svg>
     }
 }
@@ -29,62 +13,17 @@ pub fn Play() -> impl IntoView {
 #[component]
 pub fn Pause() -> impl IntoView {
     view! {
-        <svg
-            class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-            width="22"
-            height="22"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            stroke="currentColor"
-            fill="none"
-            role="graphics-symbol"
-        >
-            <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
-            <path
-                d="M9 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z"
-                stroke-width="0"
-                fill="currentColor"
-            ></path>
-            <path
-                d="M17 4h-2a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2 -2v-12a2 2 0 0 0 -2 -2z"
-                stroke-width="0"
-                fill="currentColor"
-            ></path>
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M7.145 5h1.71c.398 0 .542.047.688.134a.87.87 0 0 1 .338.38c.078.164.119.326.119.774v11.424c0 .448-.041.61-.12.774q-.117.247-.337.38c-.22.133-.29.134-.688.134h-1.71c-.398 0-.542-.047-.688-.134s-.26-.216-.338-.38S6 18.16 6 17.712V6.288c0-.448.041-.61.12-.774a.87.87 0 0 1 .337-.38c.146-.087.29-.134.688-.134m8 0h1.71c.398 0 .542.047.688.134a.87.87 0 0 1 .338.38c.078.164.119.326.119.774v11.424c0 .448-.041.61-.12.774a.87.87 0 0 1-.337.38c-.146.087-.29.134-.688.134h-1.71c-.398 0-.542-.047-.688-.134a.87.87 0 0 1-.338-.38c-.078-.164-.119-.326-.119-.774V6.288c0-.448.041-.61.12-.774a.87.87 0 0 1 .337-.38c.146-.087.29-.134.688-.134" />
         </svg>
-    }
-}
-
-#[component]
-pub fn PlayPause(#[prop(into)] play: Signal<bool>) -> impl IntoView {
-    move || {
-        if play.get() {
-            Either::Left(Pause())
-        } else {
-            Either::Right(Play())
-        }
     }
 }
 
 #[component]
 pub fn Volume0() -> impl IntoView {
     view! {
-        <svg
-            class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            stroke="currentColor"
-            fill="none"
-            role="graphics-symbol"
-        >
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <line x1="23" y1="9" x2="17" y2="15"></line>
-            <line x1="17" y1="9" x2="23" y2="15"></line>
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="m20 10.763 2.381-2.382A.875.875 0 1 1 23.62 9.62L21.237 12l2.382 2.381a.875.875 0 1 1-1.238 1.238L20 13.237l-2.381 2.382a.875.875 0 1 1-1.238-1.238L18.763 12 16.38 9.619a.875.875 0 1 1 1.24-1.239zm-7.02 8.06c-.031 1.207-.67 1.609-1.828.62-1.719-1.469-3.609-3.194-4.242-3.721-.632-.529-1.645-.62-3.073-.62s-1.815-.621-1.815-1.241-.014-1.83-.014-2.001c0-.055.005-.086.014-.13.02-.095-.058-.973 0-1.59.085-.906.388-1.241 1.815-1.241s2.44-.092 3.073-.62c.633-.529 2.523-2.253 4.242-3.722 1.158-.989 1.797-.587 1.829.62.043 1.607 0 3.85 0 6.683 0 2.83.043 5.356 0 6.963" />
         </svg>
     }
 }
@@ -92,20 +31,8 @@ pub fn Volume0() -> impl IntoView {
 #[component]
 pub fn Volume1() -> impl IntoView {
     view! {
-        <svg
-            class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            stroke="currentColor"
-            fill="none"
-            role="graphics-symbol"
-        >
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.98 18.823c-.031 1.207-.67 1.609-1.828.62-1.719-1.469-3.609-3.194-4.242-3.721-.632-.529-1.645-.62-3.073-.62s-1.815-.621-1.815-1.241-.014-1.83-.014-2.001c0-.055.005-.086.014-.13.02-.095-.058-.973 0-1.59.085-.906.388-1.241 1.815-1.241s2.44-.092 3.073-.62c.633-.529 2.523-2.253 4.242-3.722 1.158-.989 1.797-.587 1.829.62.043 1.607 0 3.85 0 6.683 0 2.83.043 5.356 0 6.963m2.901-8.704A.875.875 0 1 1 17.12 8.88c.176.177.41.47.64.872.384.671.616 1.425.616 2.247s-.232 1.576-.615 2.247a4.2 4.2 0 0 1-.641.872.875.875 0 1 1-1.238-1.238c.074-.073.214-.249.36-.503.241-.423.384-.887.384-1.378s-.143-.955-.385-1.378a2.6 2.6 0 0 0-.359-.503" />
         </svg>
     }
 }
@@ -113,57 +40,17 @@ pub fn Volume1() -> impl IntoView {
 #[component]
 pub fn Volume2() -> impl IntoView {
     view! {
-        <svg
-            class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="1.5"
-            stroke="currentColor"
-            fill="none"
-            role="graphics-symbol"
-        >
-            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-            <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12.98 18.823c-.031 1.207-.67 1.609-1.828.62-1.719-1.469-3.609-3.194-4.242-3.721-.632-.529-1.645-.62-3.073-.62s-1.815-.621-1.815-1.241-.014-1.83-.014-2.001c0-.055.005-.086.014-.13.02-.095-.058-.973 0-1.59.085-.906.388-1.241 1.815-1.241s2.44-.092 3.073-.62c.633-.529 2.523-2.253 4.242-3.722 1.158-.989 1.797-.587 1.829.62.043 1.607 0 3.85 0 6.683 0 2.83.043 5.356 0 6.963m2.901-8.704A.875.875 0 1 1 17.12 8.88c.176.177.41.47.64.872.384.671.616 1.425.616 2.247s-.232 1.576-.615 2.247a4.2 4.2 0 0 1-.641.872.875.875 0 1 1-1.238-1.238c.074-.073.214-.249.36-.503.241-.423.384-.887.384-1.378s-.143-.955-.385-1.378a2.6 2.6 0 0 0-.359-.503m3-2A.875.875 0 1 1 20.12 6.88c.263.264.62.74.966 1.432.517 1.033.843 2.255.89 3.716-.047 1.403-.373 2.625-.89 3.658-.346.692-.703 1.168-.966 1.432a.875.875 0 1 1-1.238-1.238c.138-.137.383-.464.639-.976.407-.814.667-1.79.705-2.876-.038-1.144-.298-2.12-.705-2.934-.256-.512-.501-.839-.639-.976" />
         </svg>
-    }
-}
-
-#[component]
-pub fn Volume(#[prop(into)] volume: Signal<f64>) -> impl IntoView {
-    move || {
-        let vol = volume.get();
-        if vol <= 0.0 {
-            EitherOf3::A(Volume0())
-        } else if vol < 0.5 {
-            EitherOf3::B(Volume1())
-        } else {
-            EitherOf3::C(Volume2())
-        }
     }
 }
 
 #[component]
 pub fn FullScreenEnter() -> impl IntoView {
     view! {
-        <svg
-            class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            stroke="currentColor"
-            fill="none"
-            role="graphics-symbol"
-        >
-            <polyline points="4 14 10 14 10 20"></polyline>
-            <polyline points="20 10 14 10 14 4"></polyline>
-            <line x1="14" y1="10" x2="21" y2="3"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10.5 19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4.5a1 1 0 0 1 2 0v2.072l3.363-3.365a1 1 0 0 1 1.414 0l.016.016a1 1 0 0 1 0 1.414L7.429 18H9.5a1 1 0 0 1 1 1M18 7.429l-3.363 3.364a1 1 0 0 1-1.414 0l-.016-.016a1 1 0 0 1 0-1.414L16.571 6H14.5a1 1 0 0 1 0-2H19a1 1 0 0 1 1 1v4.5a1 1 0 0 1-2 0z" />
         </svg>
     }
 }
@@ -171,33 +58,17 @@ pub fn FullScreenEnter() -> impl IntoView {
 #[component]
 pub fn FullScreenExit() -> impl IntoView {
     view! {
-        <svg
-            class="group-hover:text-emphasis group-hover:dark:text-emphasis-dark transition-colors delay-75 duration-200 ease-in-out"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            stroke="currentColor"
-            fill="none"
-            role="graphics-symbol"
-        >
-            <polyline points="15 3 21 3 21 9"></polyline>
-            <polyline points="9 21 3 21 3 15"></polyline>
-            <line x1="21" y1="3" x2="14" y2="10"></line>
-            <line x1="3" y1="21" x2="10" y2="14"></line>
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M4.58 13.979a.99.99 0 0 1 .99-.99h4.451a.99.99 0 0 1 .99.99v4.452a.99.99 0 0 1-1.98 0v-2.05l-3.319 3.322a1 1 0 0 1-1.414 0v-.001a1 1 0 0 1 0-1.414l3.32-3.32H5.57a.99.99 0 0 1-.99-.99m10.388-6.36 3.32-3.322a1 1 0 0 1 1.414 0v.001a1 1 0 0 1 0 1.414l-3.32 3.32h2.049a.99.99 0 0 1 0 1.979h-4.442a1 1 0 0 1-1-1V5.569a.99.99 0 1 1 1.98 0z" />
         </svg>
     }
 }
 
 #[component]
-pub fn Fullscreen(#[prop(into)] fullscreen: Signal<bool>) -> impl IntoView {
-    move || {
-        if fullscreen.get() {
-            Either::Left(FullScreenEnter())
-        } else {
-            Either::Right(FullScreenExit())
-        }
+pub fn Loop() -> impl IntoView {
+    view! {
+        <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.924 5.617a1 1 0 0 0-.217-.324l-3-3a1 1 0 1 0-1.414 1.414L17.586 5H8a5 5 0 0 0-5 5v2a1 1 0 1 0 2 0v-2a3 3 0 0 1 3-3h9.586l-1.293 1.293a1 1 0 0 0 1.414 1.414l3-3A1 1 0 0 0 21 6m-.076-.383a1 1 0 0 1 .076.38zm-17.848 12a1 1 0 0 0 .217 1.09l3 3a1 1 0 0 0 1.414-1.414L6.414 19H16a5 5 0 0 0 5-5v-2a1 1 0 1 0-2 0v2a3 3 0 0 1-3 3H6.414l1.293-1.293a1 1 0 1 0-1.414-1.414l-3 3m-.217.324a1 1 0 0 1 .215-.322z" />
+        </svg>
     }
 }
