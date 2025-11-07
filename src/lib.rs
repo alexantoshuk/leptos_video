@@ -1,5 +1,8 @@
+#![recursion_limit = "256"]
+
 pub mod app;
 pub mod components;
+pub mod timecode;
 pub mod utils;
 
 #[cfg(feature = "hydrate")]

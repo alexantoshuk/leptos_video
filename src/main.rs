@@ -1,3 +1,4 @@
+#![recursion_limit = "256"]
 
 #[cfg(feature = "ssr")]
 #[tokio::main]
@@ -5,7 +6,7 @@ async fn main() {
     use axum::Router;
     use leptos::logging::log;
     use leptos::prelude::*;
-    use leptos_axum::{generate_route_list, LeptosRoutes};
+    use leptos_axum::{LeptosRoutes, generate_route_list};
     use leptos_video::app::*;
 
     let conf = get_configuration(None).unwrap();

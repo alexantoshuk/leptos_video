@@ -1,22 +1,22 @@
 #![allow(unused_must_use)]
 
 use super::icon::{self, *};
-use super::spinner;
+use crate::timecode::*;
+use crate::utils::*;
 use leptos::either::*;
-use leptos::ev::{Event, volumechange};
 use leptos::html;
 use leptos::logging::log;
 use leptos::prelude::*;
-use leptos_use::core::{IntoElementMaybeSignal, Position};
-use leptos_use::use_throttle_fn_with_arg_and_options;
+use leptos_use::core::Position;
 use leptos_use::{
-    UseDraggableCallbackArgs, UseDraggableOptions, UseDraggableReturn, use_draggable_with_options,
-    use_throttle_fn, use_throttle_fn_with_arg, utils::Pausable,
+    UseDraggableCallbackArgs, UseDraggableOptions, UseElementSizeReturn,
+    use_draggable_with_options, use_element_size, use_throttle_fn, use_throttle_fn_with_arg,
+    utils::Pausable,
 };
-
-use crate::utils::{is_element_fullscreen, use_video_frame_fn};
-use std::time::Duration;
-use web_sys::{self, HtmlInputElement, HtmlMediaElement, HtmlVideoElement};
+use web_sys::{
+    self, HtmlElement, HtmlInputElement, HtmlMediaElement, HtmlVideoElement, MouseEvent,
+};
+use web_time::{Duration, Instant};
 
 const THUMB_MAX_SIZE: i32 = 200;
 
@@ -24,7 +24,8 @@ const THUMB_MAX_SIZE: i32 = 200;
 pub struct VideoMetadata {
     pub aspect: RwSignal<f64>,
     pub fps: Signal<f64>,
-    pub end_frame: RwSignal<i32>,
+    pub end_frame: RwSignal<u32>,
+    pub time_format: RwSignal<TimeFormat>,
 }
 
 #[component]
@@ -43,61 +44,53 @@ pub fn Video(
     let frame = RwSignal::new(0);
     let end_frame = RwSignal::new(0);
     let aspect = RwSignal::new(0.0);
-
-    let metadata = VideoMetadata {
-        fps,
-        end_frame,
-        aspect,
-    };
-
+    let playback_rate = RwSignal::new(1.0);
+    let time_format = RwSignal::new(TimeFormat::default());
     let preload_progress = RwSignal::new(0.0);
     let volume = RwSignal::new(0.5);
     let mute = RwSignal::new(false);
-
-    // let display_proxy = RwSignal::new(false);
     let is_playing = RwSignal::new(false);
     let is_loop = RwSignal::new(true);
     let is_dragging = RwSignal::new(false);
     let is_fullscreen = RwSignal::new(false);
     let display_proxy = RwSignal::new(false);
     let is_waiting = RwSignal::new(false);
-
-    let show_overlay_controls = RwSignal::new(false);
-
+    let hide_overlay_controls = RwSignal::new(false);
     let overlay = Signal::derive(move || overlay_controls.get() || is_fullscreen.get());
-    let set_current_frame = move |video_ref: NodeRef<html::Video>, f: i32| {
+    let metadata = VideoMetadata {
+        fps,
+        end_frame,
+        aspect,
+        time_format,
+    };
+
+    let UseElementSizeReturn { width, height } = use_element_size(video_ref);
+
+    let set_current_frame = move |video_ref: NodeRef<html::Video>, f: u32| {
         if let Some(video) = video_ref.get() {
             let fps = fps.get_untracked();
             let time = time_from_frame(f, fps);
             video.set_current_time(time);
-            // frame.set(f);
         }
     };
-
-    let set_frame_throttled = use_throttle_fn_with_arg(
-        move |f: i32| {
-            frame.set(f);
-        },
-        50.0,
-    );
 
     let load_metadata = move || {
         if let Some(video) = video_ref.get() {
             let d = video.duration();
             if d.is_finite() {
-                let total_frames = (d * fps.get()).next_up() as i32;
+                let total_frames = (d * fps.get()).next_up() as u32;
                 end_frame.set((total_frames - 1).max(0));
                 aspect.set(video.video_width() as f64 / video.video_height() as f64);
             }
         }
     };
 
-    let sync_preload_progress = move || {
+    let update_preload_progress = move || {
         if let Some(video) = video_ref.get() {
             let vb = video.buffered();
             let time = video.current_time();
-            let fps = fps.get();
-            let end_frame = end_frame.get();
+            let fps = fps.get_untracked();
+            let end_frame = end_frame.get_untracked();
             let total_frames = (end_frame + 1) as f64;
             for i in (0..vb.length()).rev() {
                 let start = vb.start(i).unwrap();
@@ -112,10 +105,9 @@ pub fn Video(
         }
     };
 
-    let recover = move |video_ref: NodeRef<html::Video>| {
+    let reload = move |video_ref: NodeRef<html::Video>| {
         if let Some(video) = video_ref.get() {
             let time = video.current_time();
-
             video.load();
             video.set_current_time(time);
             if is_playing.get_untracked() {
@@ -137,7 +129,7 @@ pub fn Video(
 
     let play = move || {
         if let Some(video) = video_ref.get() {
-            if is_ended() {
+            if !is_loop.get_untracked() && is_ended() {
                 set_current_frame(video_ref, 0);
             }
             video.play();
@@ -157,19 +149,28 @@ pub fn Video(
 
     let toggle_fullscreen = move || {
         is_fullscreen.update(|f| *f = !*f);
-        // if let Some(el) = container_ref.get() {
-        //     if is_fullscreen.get() {
-        //         document().exit_fullscreen();
-        //     } else {
-        //         el.request_fullscreen();
-        //     }
-        // }
+    };
+
+    let precised_pause = move || {
+        log!("precised_pause");
+        if let Some(video) = video_ref.get() {
+            video.pause();
+
+            let fps = fps.get_untracked();
+            let t = video.current_time();
+            let timestep = 0.51 / fps;
+            let new_t = t + timestep;
+            let t = if new_t < video.duration() { new_t } else { t };
+            // set_current_frame(video_ref, f.max(frame.get_untracked()));
+
+            video.set_current_time(t);
+        }
     };
 
     let next_frame = move || {
         if let Some(video) = video_ref.get() {
-            if !video.paused() {
-                video.pause();
+            video.pause();
+            if is_playing.get_untracked() {
                 is_playing.set(false);
             }
 
@@ -178,25 +179,23 @@ pub fn Video(
             if f >= end_frame {
                 return;
             }
-            log!("time before: {}", video.current_time());
+
             let f = f + 1;
             let fps = fps.get_untracked();
             let time = time_from_frame(f, fps);
-            log!("time after: {}", time);
             video.set_current_time(time);
-            log!("is_dragging: {}", is_dragging.get_untracked());
         }
     };
 
     let prev_frame = move || {
         if let Some(video) = video_ref.get() {
-            if !video.paused() {
-                video.pause();
+            video.pause();
+            if is_playing.get_untracked() {
                 is_playing.set(false);
             }
 
             let f = frame.get_untracked();
-            if f <= 0 {
+            if f == 0 {
                 return;
             }
             let f = f - 1;
@@ -206,30 +205,38 @@ pub fn Video(
         }
     };
 
-    let on_mouse_move = {
+    let on_click = move |_| toggle_play();
+    let on_dblclick = move |_| toggle_fullscreen();
+
+    let reset_overlay_controls_timeout = {
         let timeout = StoredValue::new(None::<TimeoutHandle>);
-        let reset_timer = move || {
+        move || {
             if let Some(timeout) = timeout.get_value() {
                 timeout.clear();
             }
             if !overlay.get_untracked() {
                 return;
             }
-            if !show_overlay_controls.get_untracked() {
-                show_overlay_controls.set(true);
+            if hide_overlay_controls.get_untracked() {
+                hide_overlay_controls.set(false);
             }
 
             timeout.set_value(
                 set_timeout_with_handle(
                     move || {
-                        show_overlay_controls.set(false);
+                        let hover_or_focus = if let Some(controls) = controls_ref.get() {
+                            controls.matches(":hover, :focus").unwrap()
+                        } else {
+                            false
+                        };
+                        let show = hover_or_focus || is_dragging.get_untracked();
+                        hide_overlay_controls.set(!show);
                     },
                     Duration::from_secs(2),
                 )
                 .ok(),
             );
-        };
-        move |_| reset_timer()
+        }
     };
 
     let handle_keydown = {
@@ -260,24 +267,6 @@ pub fn Video(
             throttled_fn(key);
         }
     };
-    // let handle_keydown = move |ev: leptos::ev::KeyboardEvent| {
-    //     if is_dragging.get_untracked() {
-    //         return;
-    //     }
-    //     let key = ev.key();
-    //     match key.as_str() {
-    //         " " => toggle_play(),
-    //         "f" => toggle_fullscreen(),
-    //         "m" => toggle_mute(mute, volume),
-    //         "ArrowLeft" => {
-    //             prev_frame();
-    //         }
-    //         "ArrowRight" => {
-    //             next_frame();
-    //         }
-    //         _ => (),
-    //     }
-    // };
 
     // on create
     Effect::new(move |_| {
@@ -288,8 +277,11 @@ pub fn Video(
                 if is_dragging.get_untracked() {
                     return;
                 }
-                let f = frame_from_time(time, fps.get_untracked()).min(end_frame.get_untracked());
+                let fps = fps.get_untracked();
+                let end_frame = end_frame.get_untracked();
+                let f = frame_from_time(time, fps).min(end_frame);
                 frame.set(f);
+
                 log!("prcise time: {time}, frame: {f}");
             });
         }
@@ -297,16 +289,10 @@ pub fn Video(
 
     // fullscreen
     Effect::new(move |_| {
-        if let Some(el) = container_ref.get() {
-            if is_fullscreen.get() {
-                if !is_element_fullscreen(el.clone()) {
-                    el.request_fullscreen();
-                }
-            } else {
-                if is_element_fullscreen(el) {
-                    document().exit_fullscreen();
-                }
-            }
+        if is_fullscreen.get() {
+            request_fullscreen(container_ref.get());
+        } else if document().fullscreen() {
+            document().exit_fullscreen();
         }
     });
 
@@ -315,7 +301,8 @@ pub fn Video(
         if is_playing.get() {
             play();
         } else {
-            pause();
+            // pause();
+            precised_pause();
         }
     });
 
@@ -340,21 +327,34 @@ pub fn Video(
         }
     });
 
+    // playback rate
+    Effect::new(move |_| {
+        if let Some(video) = video_ref.get() {
+            video.set_playback_rate(playback_rate.get());
+        }
+    });
+
     // start/end seek
     Effect::new(move |_| {
         if is_dragging.get() {
             // start seek
             pause();
             let f = frame.get_untracked();
-            container_ref.get().unwrap().focus();
+            // container_ref.get().unwrap().focus();
             if let Some(_) = proxy_ref.get() {
                 set_current_frame(proxy_ref, f);
             } else {
                 set_current_frame(video_ref, f);
             }
         } else {
+            reset_overlay_controls_timeout();
             // end seek
             let f = frame.get_untracked();
+            let f = if is_playing.get_untracked() {
+                (f + 1).min(end_frame.get_untracked())
+            } else {
+                f
+            };
             set_current_frame(video_ref, f);
         }
     });
@@ -376,13 +376,22 @@ pub fn Video(
             node_ref=container_ref
             autofocus
             tabindex="-1"
-            class="relative size-full flex bg-black flex-col overflow-hidden touch-none group"
-            on:fullscreenchange=move |_| is_fullscreen.set(is_element_fullscreen(container_ref))
+            class="@container size-full relative flex bg-black flex-col overflow-hidden touch-none group outline-none select-none"
+            on:fullscreenchange=move |_| {
+                let fscr = is_element_fullscreen(container_ref);
+                is_fullscreen.set(fscr);
+            }
             on:keydown=handle_keydown
-            on:mousemove=on_mouse_move
+            on:mousemove=move |_| reset_overlay_controls_timeout()
+            on:touchmove=move |_| reset_overlay_controls_timeout()
         >
             // Video element
-            <div class="relative flex-auto m-[1px] group-fullscreen:m-0">
+            <div
+                class="relative flex-auto cursor-pointer select-none"
+                on:contextmenu=move |ev| ev.prevent_default()
+                on:click=onclick_handler(on_click, on_dblclick)
+                on:dblclick=move |ev| ev.prevent_default()
+            >
                 <video
                     // controls
                     playsinline
@@ -390,16 +399,20 @@ pub fn Video(
                     node_ref=video_ref
                     src=src
                     preload="metadata"
-                    class="cursor-pointer absolute size-full"
+                    class="absolute size-full pointer-events-none"
                     // style=move || { if display_proxy.get() { "display:none;" } else { "" } }
 
-                    on:contextmenu=move |ev| ev.prevent_default()
                     on:loadedmetadata=move |_| load_metadata()
                     on:durationchange=move |_| load_metadata()
-                    on:pause=move |_| { log!("paused") }
+                    on:timeupdate=move |_| {
+                        log!("timeupdate at: {}", video_ref.get().unwrap().current_time())
+                    }
+                    on:pause=move |_| {
+                        log!("paused at: {}", video_ref.get().unwrap().current_time())
+                    }
                     on:play=move |_| { log!("played") }
-                    on:click=move |_| toggle_play()
-                    on:progress=move |_| { sync_preload_progress() }
+
+                    on:progress=move |_| { update_preload_progress() }
                     on:ended=move |_| {
                         log!("ended");
                         if !is_dragging.get_untracked() {
@@ -423,15 +436,22 @@ pub fn Video(
                     on:stalled=move |_| {}
                     // on:suspend=move |_| log!("suspend")
                     on:canplay=move |_| {
-                        is_waiting.set(false);
-                        sync_preload_progress()
+                        log!("canplay at: {}", video_ref.get().unwrap().current_time());
+                        is_waiting.set_changed(false);
+                        update_preload_progress()
                     }
                     on:playing=move |_| {
-                        is_waiting.set(false);
+                        is_waiting.set_changed(false);
                     }
                     on:seeked=move |_| {
                         log!("seeked video");
-                        display_proxy.set(false);
+                        display_proxy.set_changed(false);
+                        if let Some(video) = video_ref.get() {
+                            log!("seeked video time: {}", video.current_time());
+                            if !video.paused() {
+                                return;
+                            }
+                        }
                         if !is_dragging.get_untracked() && is_playing.get_untracked() {
                             play();
                         }
@@ -444,89 +464,104 @@ pub fn Video(
                         node_ref=proxy_ref
                         src=proxy
                         preload="auto"
-                        class="cursor-pointer absolute size-full pointer-events-none"
-                        style:opacity=move || { if display_proxy.get() { "1" } else { "0" } }
+                        class="absolute size-full pointer-events-none"
+                        class:opacity-0=move || !display_proxy.get()
                         on:seeked=move |_| {
-                            log!("seeked proxy");
+                            log!("seeked proxy: {}", proxy_ref.get().unwrap().current_time());
                             if is_dragging.get_untracked() {
-                                display_proxy.set(true);
+                                display_proxy.set_changed(true);
                             }
                         }
                     />
+                </Show>
 
-                </Show>
-                // <div
-                // class="absolute bg-red-500/50"
-                // style=move || {
-                // let (w, h, x, y) = calc_video_transform(
-                // width.get(),
-                // height.get(),
-                // aspect.get(),
-                // );
-                // format!("width:{w}px; height: {h}px; translate:{x}px {y}px;")
-                // }
-                // ></div>
-                <Show when=move || is_waiting.get()>
-                    <div class="absolute inset-0 left-1/2 top-1/2">
-                        <spinner::Ring />
-                    </div>
-                </Show>
+                // Canvas container
+                <div
+                    class="absolute pointer-events-none"
+                    style=move || {
+                        let (w,h,x,y) = calc_video_box(
+                            width.get(),
+                            height.get(),
+                            aspect.get(),
+                        );
+                        format!("width:{w}px;height:{h}px;translate:{x}px {y}px")
+                    }
+                >
+                </div>
+
+                // Overlay Controls container
+                <div
+                    class="absolute size-full flex justify-center pointer-events-none"
+                    class:hidden=move || !is_waiting.get()
+                >
+                    // Spinner
+                    <div class="loading loading-spinner scale-200 loading-xl"></div>
+                </div>
             </div>
 
             // Controls
             <div
-                node_ref=controls_ref
-                tabindex="-1"
-                class=move || {
-                    if overlay.get() {
-                        let o = if is_dragging.get() || show_overlay_controls.get() {
-                            "100"
-                        } else {
-                            "0"
-                        };
-                        format!(
-                            "flex-none outline-none bottom-0 absolute inset-x-0 w-full px-6 pt-20 bg-gradient-to-t from-black transition-opacity duration-200 focus:opacity-100 hover:opacity-100 opacity-{o}",
-                        )
-                    } else {
-                        "flex-none outline-none bottom-0 px-6 opacity-100".into()
-                    }
-                }
+                class="transition-opacity duration-200"
+                class:opacity-0=move || overlay.get() && hide_overlay_controls.get()
             >
+                // Overlay container with gradient
+                <div
+                    class="absolute top-0 left-0 overlay-gradient pointer-events-none"
+                    class:hidden=move || !overlay.get()
+                    style=move || { format!("width:{}px;height:{}px;", width.get(), height.get()) }
+                >
 
-                <div class="relative">
-                    // Progress bar
-                    <ProgressBar
-                        node_ref=progress_ref
-                        frame=frame
-                        metadata=metadata
-                        preload=preload_progress.read_only()
-                        overlay=overlay
-                        thumb_src=proxy
-                        is_dragging=is_dragging
-                    />
+                    <span>Video name and other information</span>
+                </div>
 
-                    <div class="flex items-center justify-between h-4"></div>
-                    // Control buttons
-                    <div class="flex items-center justify-between pb-1 pt-2 bottom-0">
-                        // Left side
-                        <div class="flex items-center space-x-2">
-                            <PlayPauseToggle is_playing=is_playing />
-                            <PrevNextFrameButtonsGrp
-                                on_prev_click=prev_frame
-                                on_next_click=next_frame
-                            />
-                            <LoopToggle is_loop=is_loop />
-                            <VolumeControl volume=volume mute=mute compact=false />
-                        </div>
+                // Control bar
+                <div
+                    tabindex="-1"
+                    node_ref=controls_ref
+                    class="flex-none outline-none bottom-0 px-3 @3xl:px-4 @4xl:px-6"
+                    class=(["absolute", "inset-x-0", "w-full"], overlay)
+                >
 
-                        // Center
-                        <div class="flex items-center space-x-2">
-                            <TimeControl frame=frame end_frame=end_frame fps=fps />
-                        </div>
+                    <div class="relative">
+                        <ProgressBar
+                            node_ref=progress_ref
+                            frame
+                            metadata
+                            preload=preload_progress.read_only()
+                            overlay
+                            thumb_src=proxy
+                            is_dragging
+                        />
 
-                        // Right side
-                        <div class="flex items-center space-x-2">
-                            <FullscreenToggle is_fullscreen=is_fullscreen />
+                        <div class="flex items-center justify-between h-4"></div>
+                        // Control buttons
+                        <div class="flex items-center justify-between">
+                            // Left side
+                            <div class="shrink-0 flex items-center space-x-1">
+                                <PlayPauseToggle is_playing />
+
+                                <PlybackRateControl playback_rate />
+                                <PrevNextFrameButtonsGrp
+                                    on_prev_click=prev_frame
+                                    on_next_click=next_frame
+                                />
+                                <LoopToggle is_loop />
+                                <VolumeControl volume mute />
+                            </div>
+
+                            // Center
+                            <div class="shrink flex items-center min-w-0">
+                                <TimecodeControl frame end_frame fps time_format />
+                            </div>
+
+                            // Right side
+                            <div class="shrink-0 flex items-center space-x-0">
+                                <span class="mr-2 text-base font-medium text-gray-500 text-nowrap drop-shadow-ico hidden @3xl:block">
+                                    {move || format!("{}fps", fps.get())}
+                                </span>
+                                <Settings />
+                                <FullscreenToggle is_fullscreen />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -539,7 +574,7 @@ pub fn Video(
 fn ProgressBar(
     node_ref: NodeRef<html::Div>,
     metadata: VideoMetadata,
-    frame: RwSignal<i32>,
+    frame: RwSignal<u32>,
     preload: ReadSignal<f64>,
     #[prop(into, optional)] thumb_src: Signal<String>,
     #[prop(into)] overlay: Signal<bool>,
@@ -556,24 +591,29 @@ fn ProgressBar(
     let end_frame = metadata.end_frame;
     let fps = metadata.fps;
     let aspect = metadata.aspect;
+    let thumb_frame = RwSignal::new(0);
 
     let set_frame_throttled = use_throttle_fn_with_arg(
-        move |f: i32| {
+        move |f: u32| {
             frame.set(f);
         },
-        50.0,
+        100.0,
     );
 
     let set_thumb_frame_throttled = use_throttle_fn_with_arg(
-        move |f: i32| {
-            if let Some(thumb_video) = thumb_video_ref.get() {
-                let fps = fps.get_untracked();
-                let time = time_from_frame(f, fps);
-                thumb_video.set_current_time(time);
-            }
+        move |f: u32| {
+            thumb_frame.set(f);
         },
-        50.0,
+        100.0,
     );
+
+    Effect::new(move |_| {
+        let fps = fps.get_untracked();
+        let time = time_from_frame(thumb_frame.get(), fps);
+        if let Some(thumb_video) = thumb_video_ref.get() {
+            thumb_video.set_current_time(time);
+        }
+    });
 
     use_draggable_with_options(
         node_ref,
@@ -622,16 +662,12 @@ fn ProgressBar(
     );
 
     view! {
-        <div>
+        <div class="relative">
             <div
                 node_ref=node_ref
                 tabindex="-1"
-                class=move || {
-                    format!(
-                        "absolute outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 cursor-pointer transition-scale duration-200 {}",
-                        if overlay.get() { "bg-white/50" } else { "bg-neutral-700" },
-                    )
-                }
+                class="absolute outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 cursor-pointer transition-scale duration-200"
+
                 on:mouseover=move |ev| {
                     log!("over");
                     hover.set(Hover::Enter(ev.offset_x()))
@@ -651,20 +687,20 @@ fn ProgressBar(
                     hover.set(Hover::Exit(ev.offset_x()))
                 }
             >
+                // Track
                 <div
-                    class="absolute origin-left h-full w-full bg-white/30 transition-scale duration-200 pointer-events-none"
-                    style:scale=move || { format!("{} 1", preload.get()) }
+                    class="absolute size-full bg-neutral-600 pointer-events-none"
+                    class=("bg-white/25", move || overlay.get())
                 />
-
                 // Preload
                 <div
-                    class="absolute origin-left h-full w-full bg-white/30 transition-scale duration-200 pointer-events-none"
+                    class="absolute origin-left size-full bg-white/25 transition-scale duration-200 pointer-events-none"
                     style:scale=move || { format!("{} 1", preload.get()) }
                 />
 
                 // Progress
                 <div
-                    class="absolute origin-left h-full w-full bg-main-accent pointer-events-none"
+                    class="absolute origin-left size-full bg-primary pointer-events-none"
                     style:scale=move || {
                         format!("{} 1", frame.get() as f64 / (end_frame.get() + 1) as f64)
                     }
@@ -672,7 +708,7 @@ fn ProgressBar(
 
                 // Cursor
                 <div
-                    class="absolute origin-left h-full w-full pointer-events-none"
+                    class="absolute origin-left size-full pointer-events-none"
                     style:translate=move || {
                         format!("{}% 0", (100 * frame.get()) as f64 / (end_frame.get() + 1) as f64)
                     }
@@ -680,7 +716,12 @@ fn ProgressBar(
                     <div
                         class="h-full origin-left bg-white pointer-events-none"
                         style:width=move || {
-                            format!("calc(max({}%,3px))", 100.0 / (end_frame.get() + 1) as f64)
+                            let end_frame = end_frame.get();
+                            if end_frame == 0 {
+                                "0".into()
+                            } else {
+                                format!("calc(max({}%,3px))", 100.0 / (end_frame + 1) as f64)
+                            }
                         }
                     />
                 </div>
@@ -688,8 +729,7 @@ fn ProgressBar(
             </div>
             <Show when=move || thumb_src.get() != "">
                 <div
-                    class="absolute rounded-sm outline-solid outline-2 outline-neutral-300 drop-shadow-xl/50
-                    overflow-hidden pointer-events-none transition-opacity duration-200 delay-100"
+                    class="absolute transition-opacity duration-200 delay-100 flex flex-col items-center gap-2"
                     style=move || {
                         if let Some(p) = node_ref.get() {
                             let p_width = p.client_width();
@@ -703,21 +743,47 @@ fn ProgressBar(
                                 Hover::Exit(x) => (x, 0),
                             };
                             let x = 0.max(x - w / 2).min(p_width - w);
-                            let y = -(h + 32);
-                            format!("width:{w}px;height:{h}px;translate:{x}px {y}px;opacity:{o};")
+                            let y = -(h + 40);
+                            format!("width:{w}px;translate:{x}px {y}px;opacity:{o};")
                         } else {
                             "opacity:0".into()
                         }
                     }
                 >
-                    <video
-                        node_ref=thumb_video_ref
-                        playsinline
-                        disablepictureinpicture
-                        src=thumb_src
-                        preload="auto"
-                    />
-
+                    <div
+                        class="rounded-sm outline-solid outline-2 outline-neutral-300 drop-shadow-xl/50
+                        overflow-hidden pointer-events-none"
+                        style=move || {
+                            if let Some(p) = node_ref.get() {
+                                let (w, h) = thumbnail_size(aspect.get());
+                                format!("height:{h}px;")
+                            } else {
+                                "".into()
+                            }
+                        }
+                    >
+                        <video
+                            node_ref=thumb_video_ref
+                            playsinline
+                            disablepictureinpicture
+                            src=thumb_src
+                            preload="auto"
+                        />
+                    </div>
+                    <div class="text-base font-bold drop-shadow-ico text-neutral-300 text-center">
+                        {
+                            let time_format = metadata.time_format;
+                            move || {
+                                timecode_str(
+                                    thumb_frame.get(),
+                                    fps.get(),
+                                    end_frame.get(),
+                                    time_format.get(),
+                                    true,
+                                )
+                            }
+                        }
+                    </div>
                 </div>
             </Show>
         </div>
@@ -725,26 +791,10 @@ fn ProgressBar(
 }
 
 #[component]
-pub fn TimeControl(
-    #[prop(into)] frame: Signal<i32>,
-    #[prop(into)] end_frame: Signal<i32>,
-    #[prop(into)] fps: Signal<f64>,
-) -> impl IntoView {
-    view! {
-        // Time display
-        <div class="flex items-center text-white text-base font-mono">
-            <span>{move || timecode(frame.get(), fps.get())}</span>
-            <span class="mx-1 text-gray-400">/</span>
-            <span class="text-gray-400">{move || end_frame.get()}</span>
-        </div>
-    }
-}
-
-#[component]
-pub fn PlayPauseToggle(is_playing: RwSignal<bool>) -> impl IntoView {
+fn PlayPauseToggle(is_playing: RwSignal<bool>) -> impl IntoView {
     view! {
         <button
-            class="size-12 p-1 hover:text-white text-neutral-200 transition-colors rounded-xl cursor-pointer outline-none drop-shadow-(--icon-shadow)"
+            class="btn-player size-10 p-1"
             type="button"
             on:click=move |_| {
                 let p = !is_playing.get_untracked();
@@ -752,7 +802,6 @@ pub fn PlayPauseToggle(is_playing: RwSignal<bool>) -> impl IntoView {
             }
             on:keydown=move |ev| ev.prevent_default()
         >
-
             {move || {
                 if is_playing.get() {
                     Either::Left(view! { <icon::Pause /> })
@@ -765,27 +814,17 @@ pub fn PlayPauseToggle(is_playing: RwSignal<bool>) -> impl IntoView {
 }
 
 #[component]
-pub fn PrevNextFrameButtonsGrp<FP, FN>(on_prev_click: FP, on_next_click: FN) -> impl IntoView
+fn PrevNextFrameButtonsGrp<FP, FN>(on_prev_click: FP, on_next_click: FN) -> impl IntoView
 where
     FP: Fn() + 'static,
     FN: Fn() + 'static,
 {
     view! {
-        <div class="flex items-center space-x-0">
-            <button
-                class="w-8 h-11 p-1 -scale-x-100 hover:text-white text-neutral-200 transition-colors rounded-xl cursor-pointer outline-none drop-shadow-(--icon-shadow)"
-                type="button"
-                on:click=move |_| on_prev_click()
-                on:keydown=move |ev| ev.prevent_default()
-            >
-                <icon::NextFrame />
+        <div class="*:btn-player *:w-6 *:h-10 *:p-0 hidden @3xl:flex items-center space-x-1">
+            <button on:click=move |_| on_prev_click() on:keydown=move |ev| ev.prevent_default()>
+                <icon::NextFrame class="-scale-x-100" />
             </button>
-            <button
-                class="w-8 h-11 p-1 hover:text-white text-neutral-200 transition-colors rounded-xl cursor-pointer outline-none drop-shadow-(--icon-shadow)"
-                type="button"
-                on:click=move |_| on_next_click()
-                on:keydown=move |ev| ev.prevent_default()
-            >
+            <button on:click=move |_| on_next_click() on:keydown=move |ev| ev.prevent_default()>
                 <icon::NextFrame />
             </button>
         </div>
@@ -793,11 +832,228 @@ where
 }
 
 #[component]
-pub fn FullscreenToggle(is_fullscreen: RwSignal<bool>) -> impl IntoView {
+fn PlybackRateControl(playback_rate: RwSignal<f64>) -> impl IntoView {
+    view! {
+        <div class="dropdown dropdown-top dropdown-start hidden @2xl:block">
+            <button
+                tabindex="0"
+                class="btn-player w-16 h-10 p-1 text-base font-medium  text-gray-400"
+            >
+                <span>{move || format!("{:?}x", playback_rate.get())}</span>
+            </button>
+
+            <div
+                tabindex="-1"
+                class="dropdown-content menu bg-base-100 rounded-box z-1 min-w-90 p-2 drop-shadow-xl/50"
+            >
+                <div class="menu-title">Playback speed</div>
+                <div class="flex flex-col p-2 size-full">
+                    <div class="flex justify-between *:h-7 *:text-sm *:font-normal *:basis-0 text-current/70 ">
+                        {(1..8)
+                            .into_iter()
+                            .map(|i| {
+                                let ratio = i as f64 * 0.25;
+                                view! {
+                                    <button
+                                        class="btn btn-ghost p-1"
+                                        on:click=move |_| playback_rate.set(ratio)
+                                    >
+                                        {format!("{ratio:?}")}
+                                    </button>
+                                }
+                            })
+                            .collect_view()}
+                    </div>
+                    <input
+                        type="range"
+                        min="0.25"
+                        max="1.75"
+                        value="1.0"
+                        class="[--track-height:0.5rem] px-2"
+                        step="0.05"
+                        prop:value=move || playback_rate.get()
+                        on:input=move |ev| {
+                            ev.stop_propagation();
+                            let target = event_target::<HtmlInputElement>(&ev);
+                            let value = target.value_as_number();
+                            playback_rate.set(value);
+                        }
+                        on:keydown=move |ev| ev.prevent_default()
+                    />
+                    <div class="absolute bottom-5 -translate-y-px w-auto inset-x-0 left-6 right-6 px-1.5 flex justify-evenly *:w-0.5 h-2 *:bg-current/20 pointer-events-none">
+                        {(0..5).into_iter().map(|_| view! { <span></span> }).collect_view()}
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+#[component]
+fn LoopToggle(is_loop: RwSignal<bool>) -> impl IntoView {
     view! {
         <button
-            class="size-10 p-1 hover:text-white text-neutral-200 transition-colors rounded-xl cursor-pointer outline-none drop-shadow-(--icon-shadow)"
-            type="button"
+            class="btn-player size-10 p-1.5 hidden @xl:block"
+            on:click=move |_| {
+                let r = !is_loop.get_untracked();
+                is_loop.set(r);
+            }
+            on:keydown=move |ev| ev.prevent_default()
+        >
+            <icon::Loop enable=is_loop />
+        </button>
+    }
+}
+
+#[component]
+fn VolumeControl(volume: RwSignal<f64>, mute: RwSignal<bool>) -> impl IntoView {
+    let val = move || if mute.get() { 0.0 } else { volume.get() };
+    view! {
+        <div class="relative group/volume h-10 mobile:hidden">
+            <button
+                class="btn-player size-10 p-2"
+                on:click=move |_| toggle_mute(mute, volume)
+                on:keydown=move |ev| ev.prevent_default()
+            >
+                {move || {
+                    let vol = volume.get();
+                    if mute.get() || vol <= 0.0 {
+                        EitherOf3::A(view! { <icon::Volume0 /> })
+                    } else if vol < 0.5 {
+                        EitherOf3::B(view! { <icon::Volume1 /> })
+                    } else {
+                        EitherOf3::C(view! { <icon::Volume2 /> })
+                    }
+                }}
+
+            </button>
+
+            <div class="absolute h-full opacity-0 delay-500 rounded-md transition-opacity duration-200 top-0 flex items-center group-hover/volume:opacity-100 group-hover/volume:delay-100 compact-volume group-hover/volume:visible @4xl:base-volume"
+            >
+                <input
+                    type="range"
+                    min="0.0"
+                    max="1.0"
+                    step="0.025"
+                    class="text-neutral-300 hover:brightness-130 active:brightness-130"
+                    style:--slider-value=move || format!("{}%", val() * 100.0)
+                    prop:value=move || val()
+                    on:input=move |ev| {
+                        ev.stop_propagation();
+                        let target = event_target::<HtmlInputElement>(&ev);
+                        let vol = target.value_as_number();
+                        let m = vol == 0.0;
+                        if mute.get_untracked() != m {
+                            mute.set(m);
+                        }
+                        volume.set(vol);
+                    }
+                    on:keydown=move |ev| ev.prevent_default()
+                />
+            </div>
+        </div>
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+enum TimeFormat {
+    #[default]
+    Frames,
+    Timecode,
+}
+
+#[component]
+fn TimecodeControl(
+    time_format: RwSignal<TimeFormat>,
+    #[prop(into)] frame: Signal<u32>,
+    #[prop(into)] end_frame: Signal<u32>,
+    #[prop(into)] fps: Signal<f64>,
+) -> impl IntoView {
+    view! {
+        // Time display
+        <div class="dropdown dropdown-top dropdown-center">
+            <button tabindex="0" class="btn-player text-sm @lg:text-base font-medium">
+                <span class="text-gray-300">
+                    {move || timecode_str(
+                        frame.get(),
+                        fps.get(),
+                        end_frame.get(),
+                        time_format.get(),
+                        true,
+                    )}
+                </span>
+                <span class="text-gray-500">/</span>
+                <span class="text-gray-500">
+                    {move || {
+                        let end_frame = end_frame.get();
+                        timecode_str(end_frame, fps.get(), end_frame, time_format.get(), true)
+                    }}
+                </span>
+            </button>
+
+            <ul
+                tabindex="-1"
+                class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 drop-shadow-xl/50"
+            >
+                <li class="menu-title">Time format</li>
+                <li>
+                    <button
+                        class="flex justify-between *:pointer-events-none"
+                        on:click=move |ev| {
+                            time_format.set(TimeFormat::Frames);
+                            event_target::<HtmlElement>(&ev).blur();
+                        }
+                    >
+                        <span class="flex-start">Frames</span>
+                        <span
+                            class="size-5 flex-end {}"
+                            class:hidden=move || time_format.get() != TimeFormat::Frames
+                        >
+                            <icon::Checkmark />
+                        </span>
+                    </button>
+
+                </li>
+                <li>
+                    <button
+                        class="flex justify-between *:pointer-events-none"
+                        on:click=move |ev| {
+                            time_format.set(TimeFormat::Timecode);
+                            event_target::<HtmlElement>(&ev).blur();
+                        }
+                    >
+                        <span class="flex-start">Timecode</span>
+                        <span
+                            class="size-5 flex-end"
+                            class:hidden=move || time_format.get() != TimeFormat::Timecode
+                        >
+                            <icon::Checkmark />
+                        </span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+    }
+}
+
+#[component]
+fn Settings() -> impl IntoView {
+    view! {
+        <button
+            class="btn-player size-10 p-1.25"
+            on:click=move |_| {}
+            on:keydown=move |ev| ev.prevent_default()
+        >
+            <icon::Settings />
+        </button>
+    }
+}
+
+#[component]
+fn FullscreenToggle(is_fullscreen: RwSignal<bool>) -> impl IntoView {
+    view! {
+        <button
+            class="btn-player size-10 p-1.5"
             on:click=move |_| {
                 let p = !is_fullscreen.get_untracked();
                 is_fullscreen.set(p);
@@ -815,90 +1071,20 @@ pub fn FullscreenToggle(is_fullscreen: RwSignal<bool>) -> impl IntoView {
     }
 }
 
-#[component]
-pub fn LoopToggle(is_loop: RwSignal<bool>) -> impl IntoView {
-    view! {
-        <button
-            class=move || {
-                format!(
-                    "size-10 p-2 transition-colors rounded-xl cursor-pointer outline-none drop-shadow-(--icon-shadow) {}",
-                    if is_loop.get() {
-                        "hover:text-white text-neutral-200"
-                    } else {
-                        "hover:text-neutral-400 text-neutral-500"
-                    },
-                )
-            }
-            type="button"
-            // style:opacity=move || { if is_loop.get() { "1" } else { "0.7" } }
-            on:click=move |_| {
-                let r = !is_loop.get_untracked();
-                is_loop.set(r);
-            }
-            on:keydown=move |ev| ev.prevent_default()
-        >
-            <icon::Loop />
-        </button>
-    }
-}
-
-#[component]
-fn VolumeControl(
-    volume: RwSignal<f64>,
-    mute: RwSignal<bool>,
-    #[prop(into, optional)] compact: Signal<bool>,
-) -> impl IntoView {
-    view! {
-        <div class="relative group/volume">
-            <button
-                class="size-11 p-2 hover:text-white text-neutral-200 transition-colors rounded-xl cursor-pointer outline-none drop-shadow-(--icon-shadow)"
-                type="button"
-                on:click=move |_| toggle_mute(mute, volume)
-                on:keydown=move |ev| ev.prevent_default()
-            >
-                {move || {
-                    let vol = volume.get();
-                    if mute.get() || vol <= 0.0 {
-                        EitherOf3::A(view! { <icon::Volume0 /> })
-                    } else if vol < 0.5 {
-                        EitherOf3::B(view! { <icon::Volume1 /> })
-                    } else {
-                        EitherOf3::C(view! { <icon::Volume2 /> })
-                    }
-                }}
-            </button>
-
-            <div class=move || {
-                format!(
-                    "absolute opacity-0 delay-500 transition-all duration-300 top-0 flex items-center {}",
-                    if compact.get() {
-                        "w-24 p-3 origin-top-left -rotate-90 bg-black rounded-md outline-solid outline-1 outline-neutral-700 drop-shadow-xl/50 invisible group-hover/volume:visible group-hover/volume:opacity-100 group-hover/volume:delay-100"
-                    } else {
-                        "w-20 h-full p-1 left-11 outline-none group-hover/volume:opacity-100 group-hover/volume:delay-100"
-                    },
-                )
-            }>
-                <input
-                    type="range"
-                    min="0.0"
-                    max="1.0"
-                    step="0.01"
-                    prop:value=move || if mute.get() { 0.0 } else { volume.get() }
-                    on:input=move |ev| {
-                        ev.stop_propagation();
-                        let target = event_target::<HtmlInputElement>(&ev);
-                        let vol = target.value_as_number();
-                        let m = vol == 0.0;
-                        if mute.get_untracked() != m {
-                            mute.set(m);
-                        }
-                        volume.set(vol);
-                    }
-                    on:keydown=move |ev| ev.prevent_default()
-                    class="appearance-none hover:text-white text-neutral-200 outline-none rounded-full"
-                />
-            </div>
-        </div>
+fn timecode_str(
+    frame: u32,
+    fps: f64,
+    end_frame: u32,
+    time_format: TimeFormat,
+    show_frames: bool,
+) -> String {
+    match time_format {
+        TimeFormat::Frames => frame.to_string(),
+        TimeFormat::Timecode => {
+            let show_hours = Timecode::hours(end_frame, fps) != 0;
+            let t = Timecode::from_frame(frame, fps);
+            t.to_string_opt(show_hours, show_frames)
+        }
     }
 }
 
@@ -910,28 +1096,17 @@ fn toggle_mute(mute: RwSignal<bool>, volume: RwSignal<f64>) {
     mute.set(m);
 }
 
-fn timecode(frame: i32, fps: f64) -> String {
-    let fframe = frame as f64;
-    let time = fframe / fps;
-    let hours = (time / 360.0).floor() as i32;
-    let minutes = (time / 60.0).floor() as i32;
-    let seconds = (time % 60.0).floor() as i32;
-    let frame = (fframe % fps) as i32;
-    let pad = (fps as i32).to_string().len();
-    format!("{hours:02}:{minutes:02}:{seconds:02}:{frame:0>pad$}")
-}
-
-fn frame_from_pos(pos: f64, end_frame: i32) -> i32 {
+fn frame_from_pos(pos: f64, end_frame: u32) -> u32 {
     let pos = pos.max(0.0);
     let total_frames = end_frame + 1;
-    ((pos * total_frames as f64 + 0.01) as i32).min(end_frame)
+    ((pos * total_frames as f64 + 0.01) as u32).min(end_frame)
 }
 
-fn frame_from_time(time: f64, fps: f64) -> i32 {
-    (time * fps + 0.01) as i32
+fn frame_from_time(time: f64, fps: f64) -> u32 {
+    (time * fps + 0.01) as u32
 }
 
-fn time_from_frame(frame: i32, fps: f64) -> f64 {
+fn time_from_frame(frame: u32, fps: f64) -> f64 {
     (frame as f64 + 0.01) / fps
 }
 
@@ -949,27 +1124,23 @@ fn thumbnail_size(aspect: f64) -> (i32, i32) {
     }
 }
 
-fn discretize_time(time: f64, fps: f64) -> f64 {
-    (time * fps).next_up().floor() / fps
-}
-
-fn frame_from_time_rounded(time: f64, fps: f64) -> i32 {
-    (time * fps).round() as i32
-}
-
-fn calc_video_transform(el_width: f64, el_height: f64, video_aspect: f64) -> (f64, f64, f64, f64) {
-    let el_aspect = el_width / el_height;
-    if video_aspect < el_aspect {
-        let w = video_aspect * el_height;
-        let h = el_height;
-        let x = (el_width - w) / 2.0;
+fn calc_video_box(
+    container_width: f64,
+    container_height: f64,
+    video_aspect: f64,
+) -> (f64, f64, f64, f64) {
+    let container_aspect = container_width / container_height;
+    if video_aspect < container_aspect {
+        let w = video_aspect * container_height;
+        let h = container_height;
+        let x = (container_width - w) / 2.0;
         let y = 0.0;
         (w, h, x, y)
     } else {
-        let w = el_width;
-        let h = el_width / video_aspect;
+        let w = container_width;
+        let h = container_width / video_aspect;
         let x = 0.0;
-        let y = (el_height - h) / 2.0;
+        let y = (container_height - h) / 2.0;
         (w, h, x, y)
     }
 }
