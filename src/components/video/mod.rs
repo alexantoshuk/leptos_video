@@ -150,8 +150,8 @@ pub fn Video(
         is_fullscreen.update(|f| *f = !*f);
     };
 
-    let precised_pause = move || {
-        log!("precised_pause");
+    let precise_pause = move || {
+        log!("precise_pause");
         if let Some(video) = video_ref.get_untracked() {
             video.pause();
 
@@ -301,7 +301,7 @@ pub fn Video(
             play();
         } else {
             // pause();
-            precised_pause();
+            precise_pause();
         }
     });
 
@@ -815,11 +815,19 @@ where
     FN: Fn() + 'static,
 {
     view! {
-        <div class="*:btn-player *:w-6 *:h-10 *:p-0 hidden @3xl:flex items-center space-x-1">
-            <button on:click=move |_| on_prev_click() on:keydown=move |ev| ev.prevent_default()>
+        <div class="*:btn-player *:w-8 *:h-10 hidden @3xl:flex items-center space-x-1">
+            <button
+                class="p-0 pl-2"
+                on:click=move |_| on_prev_click()
+                on:keydown=move |ev| ev.prevent_default()
+            >
                 <icon::NextFrame class="-scale-x-100" />
             </button>
-            <button on:click=move |_| on_next_click() on:keydown=move |ev| ev.prevent_default()>
+            <button
+                class="p-0 pr-2"
+                on:click=move |_| on_next_click()
+                on:keydown=move |ev| ev.prevent_default()
+            >
                 <icon::NextFrame />
             </button>
         </div>
