@@ -14,7 +14,6 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
                 <MetaTags />
@@ -47,11 +46,14 @@ pub fn App() -> impl IntoView {
             }
             "#
         </script>
-        // injects a stylesheet into the document <head>
-        // id=leptos means cargo-leptos will hot-reload this stylesheet
+
         <Stylesheet id="leptos" href="/pkg/app.css" />
+
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+        <link rel="icon" href="/favicon.png" type="image/png" sizes="48x48" />
+
         <link rel="manifest" href="/manifest.json" />
+
         // sets the document title
         <Title text="Welcome  to Leptos" />
 
