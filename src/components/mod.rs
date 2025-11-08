@@ -1,3 +1,3 @@
 pub mod icon;
-pub mod menu;
 pub mod video;
+pub use video::Video;

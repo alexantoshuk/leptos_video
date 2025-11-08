@@ -2,7 +2,7 @@ use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_use::core::IntoElementMaybeSignal;
 use leptos_use::utils::Pausable;
-use web_sys::MouseEvent;
+use web_sys::{Element, HtmlVideoElement, MouseEvent};
 use web_time::{Duration, Instant};
 
 pub trait RwSignalEx<T> {
@@ -58,7 +58,7 @@ pub fn onclick_handler(
 
 pub fn is_element_fullscreen<El, M: ?Sized>(target: El) -> bool
 where
-    El: IntoElementMaybeSignal<web_sys::Element, M>,
+    El: IntoElementMaybeSignal<Element, M>,
 {
     if let Some(target) = target.into_element_maybe_signal().get_untracked()
         && let Some(el) = document().fullscreen_element()
@@ -71,7 +71,7 @@ where
 
 pub fn request_fullscreen<El, M: ?Sized>(target: El)
 where
-    El: IntoElementMaybeSignal<web_sys::Element, M>,
+    El: IntoElementMaybeSignal<Element, M>,
 {
     if let Some(target) = target.into_element_maybe_signal().get_untracked() {
         if let Some(el) = document().fullscreen_element()
@@ -84,7 +84,7 @@ where
 }
 
 pub fn use_video_frame_fn(
-    video: web_sys::HtmlVideoElement,
+    video: HtmlVideoElement,
     callback: impl Fn(f64) + 'static,
 ) -> Pausable<impl Fn() + Clone + Send + Sync, impl Fn() + Clone + Send + Sync> {
     #[cfg(feature = "ssr")]

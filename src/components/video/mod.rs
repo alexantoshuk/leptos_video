@@ -1,5 +1,4 @@
 #![allow(unused_must_use)]
-
 use super::icon::{self, *};
 use crate::timecode::*;
 use crate::utils::*;
@@ -67,7 +66,7 @@ pub fn Video(
     let UseElementSizeReturn { width, height } = use_element_size(video_ref);
 
     let set_current_frame = move |video_ref: NodeRef<html::Video>, f: u32| {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             let fps = fps.get_untracked();
             let time = time_from_frame(f, fps);
             video.set_current_time(time);
@@ -75,7 +74,7 @@ pub fn Video(
     };
 
     let load_metadata = move || {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             let d = video.duration();
             if d.is_finite() {
                 let total_frames = (d * fps.get()).next_up() as u32;
@@ -86,7 +85,7 @@ pub fn Video(
     };
 
     let update_preload_progress = move || {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             let vb = video.buffered();
             let time = video.current_time();
             let fps = fps.get_untracked();
@@ -106,7 +105,7 @@ pub fn Video(
     };
 
     let reload = move |video_ref: NodeRef<html::Video>| {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             let time = video.current_time();
             video.load();
             video.set_current_time(time);
@@ -117,18 +116,18 @@ pub fn Video(
     };
 
     let is_ended = move || {
-        let video = video_ref.get().unwrap();
+        let video = video_ref.get_untracked().unwrap();
         video.ended() || frame.get_untracked() >= end_frame.get_untracked()
     };
 
     let stop = move || {
-        let video = video_ref.get().unwrap();
+        let video = video_ref.get_untracked().unwrap();
         video.pause();
         set_current_frame(video_ref, 0);
     };
 
     let play = move || {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             if !is_loop.get_untracked() && is_ended() {
                 set_current_frame(video_ref, 0);
             }
@@ -138,7 +137,7 @@ pub fn Video(
 
     let pause = move || {
         log!("press_pause");
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.pause();
         }
     };
@@ -153,7 +152,7 @@ pub fn Video(
 
     let precised_pause = move || {
         log!("precised_pause");
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.pause();
 
             let fps = fps.get_untracked();
@@ -168,7 +167,7 @@ pub fn Video(
     };
 
     let next_frame = move || {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.pause();
             if is_playing.get_untracked() {
                 is_playing.set(false);
@@ -188,7 +187,7 @@ pub fn Video(
     };
 
     let prev_frame = move || {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.pause();
             if is_playing.get_untracked() {
                 is_playing.set(false);
@@ -271,7 +270,7 @@ pub fn Video(
     // on create
     Effect::new(move |_| {
         load_metadata();
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             use_video_frame_fn(video, move |time| {
                 log!("prcise time begin");
                 if is_dragging.get_untracked() {
@@ -290,7 +289,7 @@ pub fn Video(
     // fullscreen
     Effect::new(move |_| {
         if is_fullscreen.get() {
-            request_fullscreen(container_ref.get());
+            request_fullscreen(container_ref.get_untracked());
         } else if document().fullscreen() {
             document().exit_fullscreen();
         }
@@ -308,28 +307,28 @@ pub fn Video(
 
     // loop
     Effect::new(move |_| {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.set_loop(is_loop.get());
         }
     });
 
     // mute
     Effect::new(move |_| {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.set_muted(mute.get());
         }
     });
 
     // volume
     Effect::new(move |_| {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.set_volume(volume.get());
         }
     });
 
     // playback rate
     Effect::new(move |_| {
-        if let Some(video) = video_ref.get() {
+        if let Some(video) = video_ref.get_untracked() {
             video.set_playback_rate(playback_rate.get());
         }
     });
@@ -340,8 +339,8 @@ pub fn Video(
             // start seek
             pause();
             let f = frame.get_untracked();
-            // container_ref.get().unwrap().focus();
-            if let Some(_) = proxy_ref.get() {
+            // container_ref.get_untracked().unwrap().focus();
+            if let Some(_) = proxy_ref.get_untracked() {
                 set_current_frame(proxy_ref, f);
             } else {
                 set_current_frame(video_ref, f);
@@ -363,7 +362,7 @@ pub fn Video(
     Effect::new(move |_| {
         let f = frame.get();
         if is_dragging.get_untracked() {
-            if let Some(_) = proxy_ref.get() {
+            if let Some(_) = proxy_ref.get_untracked() {
                 set_current_frame(proxy_ref, f);
             } else {
                 set_current_frame(video_ref, f);
@@ -405,10 +404,10 @@ pub fn Video(
                     on:loadedmetadata=move |_| load_metadata()
                     on:durationchange=move |_| load_metadata()
                     on:timeupdate=move |_| {
-                        log!("timeupdate at: {}", video_ref.get().unwrap().current_time())
+                        log!("timeupdate at: {}", video_ref.get_untracked().unwrap().current_time())
                     }
                     on:pause=move |_| {
-                        log!("paused at: {}", video_ref.get().unwrap().current_time())
+                        log!("paused at: {}", video_ref.get_untracked().unwrap().current_time())
                     }
                     on:play=move |_| { log!("played") }
 
@@ -423,7 +422,7 @@ pub fn Video(
                         log!("Waiting video...");
                         set_timeout(
                             move || {
-                                if video_ref.get().unwrap().ready_state()
+                                if video_ref.get_untracked().unwrap().ready_state()
                                     <= HtmlMediaElement::HAVE_CURRENT_DATA
                                 {
                                     is_waiting.set(true);
@@ -436,7 +435,7 @@ pub fn Video(
                     on:stalled=move |_| {}
                     // on:suspend=move |_| log!("suspend")
                     on:canplay=move |_| {
-                        log!("canplay at: {}", video_ref.get().unwrap().current_time());
+                        log!("canplay at: {}", video_ref.get_untracked().unwrap().current_time());
                         is_waiting.set_changed(false);
                         update_preload_progress()
                     }
@@ -446,7 +445,7 @@ pub fn Video(
                     on:seeked=move |_| {
                         log!("seeked video");
                         display_proxy.set_changed(false);
-                        if let Some(video) = video_ref.get() {
+                        if let Some(video) = video_ref.get_untracked() {
                             log!("seeked video time: {}", video.current_time());
                             if !video.paused() {
                                 return;
@@ -467,7 +466,9 @@ pub fn Video(
                         class="absolute size-full pointer-events-none"
                         class:opacity-0=move || !display_proxy.get()
                         on:seeked=move |_| {
-                            log!("seeked proxy: {}", proxy_ref.get().unwrap().current_time());
+                            log!(
+                                "seeked proxy: {}", proxy_ref.get_untracked().unwrap().current_time()
+                            );
                             if is_dragging.get_untracked() {
                                 display_proxy.set_changed(true);
                             }
@@ -617,7 +618,7 @@ fn ProgressBar(
             .on_start(move |args| {
                 is_dragging.set(true);
 
-                if let Some(p) = node_ref.get() {
+                if let Some(p) = node_ref.get_untracked() {
                     let pos = args.event.offset_x() as f64 / p.client_width() as f64;
                     let f = frame_from_pos(pos, end_frame.get_untracked());
                     frame.set(f);
@@ -632,7 +633,7 @@ fn ProgressBar(
                 }
             })
             .on_move(move |args| {
-                if let Some(p) = node_ref.get() {
+                if let Some(p) = node_ref.get_untracked() {
                     let x = args.event.client_x() - p.get_bounding_client_rect().left() as i32;
                     let pos = x as f64 / p.client_width() as f64;
                     let f = frame_from_pos(pos, end_frame.get_untracked());
@@ -641,7 +642,7 @@ fn ProgressBar(
                 }
             })
             .on_end(move |args| {
-                if let Some(p) = node_ref.get() {
+                if let Some(p) = node_ref.get_untracked() {
                     let x = args.event.client_x() - p.get_bounding_client_rect().left() as i32;
                     hover.set(Hover::Exit(x));
                     is_dragging.set(false);
@@ -669,7 +670,7 @@ fn ProgressBar(
                 on:mousemove=move |ev| {
                     log!("move");
                     let x = ev.offset_x();
-                    if let Some(p) = node_ref.get() {
+                    if let Some(p) = node_ref.get_untracked() {
                         let pos = x as f64 / p.client_width() as f64;
                         let f = frame_from_pos(pos, end_frame.get_untracked());
                         set_thumb_frame_throttled(f);
@@ -725,7 +726,7 @@ fn ProgressBar(
                 <div
                     class="absolute transition-opacity duration-200 delay-100 flex flex-col items-center gap-2"
                     style=move || {
-                        if let Some(p) = node_ref.get() {
+                        if let Some(p) = node_ref.get_untracked() {
                             let p_width = p.client_width();
                             let (w, h) = thumbnail_size(aspect.get());
                             if w == 0 {
@@ -748,7 +749,7 @@ fn ProgressBar(
                         class="rounded-sm outline-solid outline-2 outline-neutral-300 drop-shadow-xl/50
                         overflow-hidden pointer-events-none"
                         style=move || {
-                            if let Some(p) = node_ref.get() {
+                            if let Some(p) = node_ref.get_untracked() {
                                 let (w, h) = thumbnail_size(aspect.get());
                                 format!("height:{h}px;")
                             } else {
