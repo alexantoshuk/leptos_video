@@ -32,11 +32,26 @@ pub fn App() -> impl IntoView {
     provide_meta_context();
 
     view! {
-        <script>0</script>
+        <script>
+            r#"
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch(registrationError => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+                });
+            }
+            "#
+        </script>
         // injects a stylesheet into the document <head>
         // id=leptos means cargo-leptos will hot-reload this stylesheet
-        <Stylesheet id="leptos" href="/pkg/leptos_video.css" />
-
+        <Stylesheet id="leptos" href="/pkg/app.css" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+        <link rel="manifest" href="/manifest.json" />
         // sets the document title
         <Title text="Welcome  to Leptos" />
 

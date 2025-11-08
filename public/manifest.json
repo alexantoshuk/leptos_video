@@ -1,0 +1,15 @@
+{
+  "name": "My Frame.io-like App",
+  "short_name": "VideoEditor",
+  "description": "A video editing PWA built with Leptos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any"
+    }
+  ]
+}
