@@ -41,7 +41,7 @@ leptos-use = { version = "0.16.3", features = [
 send_wrapper = "0.6.0"
 serde = "1.0.228"
 serde_json = "1.0.145"
-regex = "1.12.2"
+regex = {version="1.12.2", default-features = false}
 web-time = "1.1.0"
 # icondata = "0.6.0"
 

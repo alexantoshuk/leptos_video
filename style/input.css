@@ -1,14 +1,20 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,100..900;1,100..900&display=swap");
-
 @import "tailwindcss";
-@plugin "@tailwindcss/typography";
 
-@plugin "daisyui" {
+@source not "./tailwindcss";
+@source not "./daisyui{,*}.mjs";
+
+@plugin "@tailwindcss/typography";
+@plugin "./daisyui.mjs" {
     themes:
         nord --default,
         night --prefersdark,
         cupcake,
         dracula;
+}
+/* Optional for custom themes – Docs: https://daisyui.com/docs/themes/#how-to-add-a-new-custom-theme */
+@plugin "./daisyui-theme.mjs" {
+    /* custom theme here */
 }
 
 @variant fullscreen (&:fullscreen);

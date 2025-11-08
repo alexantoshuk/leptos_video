@@ -479,15 +479,10 @@ pub fn Video(
                 <div
                     class="absolute pointer-events-none"
                     style=move || {
-                        let (w,h,x,y) = calc_video_box(
-                            width.get(),
-                            height.get(),
-                            aspect.get(),
-                        );
+                        let (w, h, x, y) = calc_video_box(width.get(), height.get(), aspect.get());
                         format!("width:{w}px;height:{h}px;translate:{x}px {y}px")
                     }
-                >
-                </div>
+                ></div>
 
                 // Overlay Controls container
                 <div
@@ -510,7 +505,6 @@ pub fn Video(
                     class:hidden=move || !overlay.get()
                     style=move || { format!("width:{}px;height:{}px;", width.get(), height.get()) }
                 >
-
                     <span>Video name and other information</span>
                 </div>
 
