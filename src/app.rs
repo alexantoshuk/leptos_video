@@ -50,7 +50,6 @@ pub fn App() -> impl IntoView {
         <Stylesheet id="leptos" href="/pkg/app.css" />
 
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
-        <link rel="icon" href="/favicon.png" type="image/png" sizes="48x48" />
 
         <link rel="manifest" href="/manifest.json" />
 
