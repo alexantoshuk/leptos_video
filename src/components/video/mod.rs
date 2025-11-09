@@ -1,5 +1,5 @@
 #![allow(unused_must_use)]
-use super::icon::{self, *};
+use super::icon;
 use crate::timecode::*;
 use crate::utils::*;
 use leptos::either::*;
@@ -12,8 +12,10 @@ use leptos_use::{
     use_draggable_with_options, use_element_size, use_throttle_fn, use_throttle_fn_with_arg,
     utils::Pausable,
 };
+
 use web_sys::{
-    self, HtmlElement, HtmlInputElement, HtmlMediaElement, HtmlVideoElement, MouseEvent,
+    self, CanvasRenderingContext2d, HtmlCanvasElement, HtmlElement, HtmlInputElement,
+    HtmlMediaElement, HtmlVideoElement, MouseEvent,
 };
 use web_time::{Duration, Instant};
 
@@ -21,9 +23,9 @@ const THUMB_MAX_SIZE: i32 = 200;
 
 #[derive(Clone, Debug, Default)]
 pub struct VideoMetadata {
-    pub aspect: RwSignal<f64>,
     pub fps: Signal<f64>,
     pub end_frame: RwSignal<u32>,
+    pub aspect: RwSignal<f64>,
     pub time_format: RwSignal<TimeFormat>,
 }
 
@@ -38,7 +40,6 @@ pub fn Video(
     let video_ref = NodeRef::<html::Video>::new();
     let proxy_ref = NodeRef::<html::Video>::new();
     let controls_ref = NodeRef::<html::Div>::new();
-    let progress_ref = NodeRef::<html::Div>::new();
 
     let frame = RwSignal::new(0);
     let end_frame = RwSignal::new(0);
@@ -63,7 +64,10 @@ pub fn Video(
         time_format,
     };
 
-    let UseElementSizeReturn { width, height } = use_element_size(video_ref);
+    let UseElementSizeReturn {
+        width: video_container_width,
+        height: video_container_height,
+    } = use_element_size(video_ref);
 
     let set_current_frame = move |video_ref: NodeRef<html::Video>, f: u32| {
         if let Some(video) = video_ref.get_untracked() {
@@ -336,7 +340,7 @@ pub fn Video(
     // start/end seek
     Effect::new(move |_| {
         if is_dragging.get() {
-            // start seek
+            // start dragging seek
             pause();
             let f = frame.get_untracked();
             // container_ref.get_untracked().unwrap().focus();
@@ -347,7 +351,7 @@ pub fn Video(
             }
         } else {
             reset_overlay_controls_timeout();
-            // end seek
+            // end dragging seek
             let f = frame.get_untracked();
             let f = if is_playing.get_untracked() {
                 (f + 1).min(end_frame.get_untracked())
@@ -358,10 +362,10 @@ pub fn Video(
         }
     });
 
-    // seek
     Effect::new(move |_| {
         let f = frame.get();
         if is_dragging.get_untracked() {
+            // dragging seek process
             if let Some(_) = proxy_ref.get_untracked() {
                 set_current_frame(proxy_ref, f);
             } else {
@@ -480,7 +484,11 @@ pub fn Video(
                 <div
                     class="absolute pointer-events-none"
                     style=move || {
-                        let (w, h, x, y) = calc_video_box(width.get(), height.get(), aspect.get());
+                        let (w, h, x, y) = calc_video_box(
+                            video_container_width.get(),
+                            video_container_height.get(),
+                            aspect.get(),
+                        );
                         format!("width:{w}px;height:{h}px;translate:{x}px {y}px")
                     }
                 ></div>
@@ -504,7 +512,13 @@ pub fn Video(
                 <div
                     class="absolute top-0 left-0 overlay-gradient pointer-events-none"
                     class:hidden=move || !overlay.get()
-                    style=move || { format!("width:{}px;height:{}px;", width.get(), height.get()) }
+                    style=move || {
+                        format!(
+                            "width:{}px;height:{}px;",
+                            video_container_width.get(),
+                            video_container_height.get(),
+                        )
+                    }
                 >
                     <span>Video name and other information</span>
                 </div>
@@ -519,12 +533,11 @@ pub fn Video(
 
                     <div class="relative">
                         <ProgressBar
-                            node_ref=progress_ref
+                            proxy_ref
                             frame
                             metadata
                             preload=preload_progress.read_only()
                             overlay
-                            thumb_src=proxy
                             is_dragging
                         />
 
@@ -566,12 +579,23 @@ pub fn Video(
 }
 
 #[component]
-fn ProgressBar(
-    node_ref: NodeRef<html::Div>,
+fn Controls(
     metadata: VideoMetadata,
     frame: RwSignal<u32>,
     preload: ReadSignal<f64>,
-    #[prop(into, optional)] thumb_src: Signal<String>,
+    playback_rate: RwSignal<f64>,
+    is_playing: RwSignal<bool>,
+    is_dragging: RwSignal<bool>,
+    is_fullscreen: RwSignal<bool>,
+) -> impl IntoView {
+}
+
+#[component]
+fn ProgressBar(
+    proxy_ref: NodeRef<html::Video>,
+    metadata: VideoMetadata,
+    frame: RwSignal<u32>,
+    preload: ReadSignal<f64>,
     #[prop(into)] overlay: Signal<bool>,
     is_dragging: RwSignal<bool>,
 ) -> impl IntoView {
@@ -581,11 +605,13 @@ fn ProgressBar(
         Move(i32),
         Exit(i32),
     }
-    let thumb_video_ref = NodeRef::<html::Video>::new();
+    let node_ref = NodeRef::<html::Div>::new();
+    let thumb_canvas_ref = NodeRef::<html::Canvas>::new();
     let hover = RwSignal::new(Hover::Exit(0));
     let end_frame = metadata.end_frame;
     let fps = metadata.fps;
     let aspect = metadata.aspect;
+
     let thumb_frame = RwSignal::new(0);
 
     let set_frame_throttled = use_throttle_fn_with_arg(
@@ -602,11 +628,26 @@ fn ProgressBar(
         100.0,
     );
 
+    #[cfg(not(feature = "ssr"))]
     Effect::new(move |_| {
-        let fps = fps.get_untracked();
-        let time = time_from_frame(thumb_frame.get(), fps);
-        if let Some(thumb_video) = thumb_video_ref.get() {
-            thumb_video.set_current_time(time);
+        use wasm_bindgen::{JsCast, JsValue};
+        if let Some(proxy_video) = proxy_ref.get_untracked()
+            && let Some(canvas) = thumb_canvas_ref.get_untracked()
+        {
+            let fps = fps.get_untracked();
+            let time = time_from_frame(thumb_frame.get(), fps);
+            proxy_video.set_current_time(time);
+
+            if let Ok(Some(ctx)) = canvas.get_context("2d") {
+                let ctx: CanvasRenderingContext2d = ctx.unchecked_into();
+                ctx.draw_image_with_html_video_element_and_dw_and_dh(
+                    &proxy_video,
+                    0.0,
+                    0.0,
+                    canvas.width() as f64,
+                    canvas.height() as f64,
+                );
+            }
         }
     });
 
@@ -722,65 +763,53 @@ fn ProgressBar(
                 </div>
 
             </div>
-            <Show when=move || thumb_src.get() != "">
-                <div
-                    class="absolute transition-opacity duration-200 delay-100 flex flex-col items-center gap-2"
-                    style=move || {
-                        if let Some(p) = node_ref.get_untracked() {
-                            let p_width = p.client_width();
-                            let (w, h) = thumbnail_size(aspect.get());
-                            if w == 0 {
-                                return "opacity:0".into();
-                            }
-                            let (x, o) = match hover.get() {
-                                Hover::Move(x) => (x, (!is_dragging.get()).into()),
-                                Hover::Enter(x) => (x, 0),
-                                Hover::Exit(x) => (x, 0),
-                            };
-                            let x = 0.max(x - w / 2).min(p_width - w);
-                            let y = -(h + 40);
-                            format!("width:{w}px;translate:{x}px {y}px;opacity:{o};")
-                        } else {
-                            "opacity:0".into()
+            // <Show when=move || proxy_ref.get().is_some()>
+            <div
+                class="absolute transition-opacity duration-200 delay-100 flex flex-col items-center gap-2"
+                style=move || {
+                    if let Some(p) = node_ref.get_untracked() {
+                        let p_width = p.client_width();
+                        let (w, h) = thumbnail_size(aspect.get());
+                        if w == 0 {
+                            return "opacity:0".into();
+                        }
+                        let (x, o) = match hover.get() {
+                            Hover::Move(x) => (x, (!is_dragging.get()).into()),
+                            Hover::Enter(x) => (x, 0),
+                            Hover::Exit(x) => (x, 0),
+                        };
+                        let x = 0.max(x - w / 2).min(p_width - w);
+                        let y = -(h + 40);
+                        format!("translate:{x}px {y}px;opacity:{o};")
+                    } else {
+                        "opacity:0".into()
+                    }
+                }
+            >
+                <div class="rounded-sm outline-solid outline-2 outline-neutral-300 drop-shadow-xl/50
+                overflow-hidden pointer-events-none">
+                    {move || {
+                        let (w, h) = thumbnail_size(aspect.get());
+                        view! { <canvas node_ref=thumb_canvas_ref width=w height=h></canvas> }
+                    }}
+
+                </div>
+                <div class="text-base font-bold drop-shadow-ico text-neutral-300 text-center">
+                    {
+                        let time_format = metadata.time_format;
+                        move || {
+                            timecode_str(
+                                thumb_frame.get(),
+                                fps.get(),
+                                end_frame.get(),
+                                time_format.get(),
+                                true,
+                            )
                         }
                     }
-                >
-                    <div
-                        class="rounded-sm outline-solid outline-2 outline-neutral-300 drop-shadow-xl/50
-                        overflow-hidden pointer-events-none"
-                        style=move || {
-                            if let Some(p) = node_ref.get_untracked() {
-                                let (w, h) = thumbnail_size(aspect.get());
-                                format!("height:{h}px;")
-                            } else {
-                                "".into()
-                            }
-                        }
-                    >
-                        <video
-                            node_ref=thumb_video_ref
-                            playsinline
-                            disablepictureinpicture
-                            src=thumb_src
-                            preload="auto"
-                        />
-                    </div>
-                    <div class="text-base font-bold drop-shadow-ico text-neutral-300 text-center">
-                        {
-                            let time_format = metadata.time_format;
-                            move || {
-                                timecode_str(
-                                    thumb_frame.get(),
-                                    fps.get(),
-                                    end_frame.get(),
-                                    time_format.get(),
-                                    true,
-                                )
-                            }
-                        }
-                    </div>
                 </div>
-            </Show>
+            </div>
+        // </Show>
         </div>
     }
 }
@@ -959,7 +988,7 @@ fn VolumeControl(volume: RwSignal<f64>, mute: RwSignal<bool>) -> impl IntoView {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-enum TimeFormat {
+pub enum TimeFormat {
     #[default]
     Frames,
     Timecode,
