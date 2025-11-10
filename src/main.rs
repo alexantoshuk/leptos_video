@@ -1,5 +1,7 @@
 #![recursion_limit = "256"]
 
+pub mod api;
+
 #[cfg(feature = "ssr")]
 #[tokio::main]
 async fn main() {
@@ -7,7 +9,7 @@ async fn main() {
     use leptos::logging::log;
     use leptos::prelude::*;
     use leptos_axum::{LeptosRoutes, generate_route_list};
-    use leptos_video::app::*;
+    use leptos_video::app::{App, shell};
 
     let conf = get_configuration(None).unwrap();
     let addr = conf.leptos_options.site_addr;

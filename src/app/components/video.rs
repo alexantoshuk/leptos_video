@@ -1,7 +1,7 @@
 #![allow(unused_must_use)]
 use super::icon;
-use crate::timecode::*;
-use crate::utils::*;
+use crate::app::timecode::*;
+use crate::app::utils::*;
 use leptos::either::*;
 use leptos::html;
 use leptos::logging::log;
