@@ -763,9 +763,8 @@ fn ProgressBar(
                 </div>
 
             </div>
-            // <Show when=move || proxy_ref.get().is_some()>
             <div
-                class="absolute transition-opacity duration-200 delay-100 flex flex-col items-center gap-2"
+                class="absolute transition-opacity duration-200 delay-100 flex flex-col items-center gap-2 pointer-events-none"
                 style=move || {
                     if let Some(p) = node_ref.get_untracked() {
                         let p_width = p.client_width();
@@ -787,7 +786,7 @@ fn ProgressBar(
                 }
             >
                 <div class="rounded-sm outline-solid outline-2 outline-neutral-300 drop-shadow-xl/50
-                overflow-hidden pointer-events-none">
+                overflow-hidden ">
                     {move || {
                         let (w, h) = thumbnail_size(aspect.get());
                         view! { <canvas node_ref=thumb_canvas_ref width=w height=h></canvas> }
@@ -809,7 +808,6 @@ fn ProgressBar(
                     }
                 </div>
             </div>
-        // </Show>
         </div>
     }
 }
