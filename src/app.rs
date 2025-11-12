@@ -44,7 +44,6 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <MetaTags />
             </head>
             <body>
-                <App />
             </body>
         </html>
     }
