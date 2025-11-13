@@ -165,7 +165,12 @@ pub fn use_video_frame_fn(
                 // log!("{metadata:?}");
                 if let Ok(time) = js!(metadata["mediaTime"]) {
                     let duration = video_clone.duration();
-                    let time = time.as_f64().unwrap() % duration;
+                    let time = time.as_f64().unwrap();
+                    let time = if time == duration {
+                        time
+                    } else {
+                        time % duration
+                    };
                     callback(time);
                 }
 

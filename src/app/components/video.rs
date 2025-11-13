@@ -160,12 +160,18 @@ pub fn Video(
             video.pause();
 
             let fps = fps.get_untracked();
-            let t = video.current_time();
-            let timestep = 0.51 / fps;
-            let new_t = t + timestep;
-            let t = if new_t < video.duration() { new_t } else { t };
-            // set_current_frame(video_ref, f.max(frame.get_untracked()));
-
+            let d = video.duration();
+            let timestep = 1.0 / fps;
+            let t = video.current_time() + timestep;
+            let t = if t > d {
+                if is_loop.get_untracked() {
+                    t % d
+                } else {
+                    t.min(d)
+                }
+            } else {
+                t
+            };
             video.set_current_time(t);
         }
     };
@@ -173,9 +179,7 @@ pub fn Video(
     let next_frame = move || {
         if let Some(video) = video_ref.get_untracked() {
             video.pause();
-            if is_playing.get_untracked() {
-                is_playing.set(false);
-            }
+            is_playing.set_changed(false);
 
             let end_frame = end_frame.get_untracked();
             let f = frame.get_untracked();
@@ -193,9 +197,7 @@ pub fn Video(
     let prev_frame = move || {
         if let Some(video) = video_ref.get_untracked() {
             video.pause();
-            if is_playing.get_untracked() {
-                is_playing.set(false);
-            }
+            is_playing.set_changed(false);
 
             let f = frame.get_untracked();
             if f == 0 {
@@ -304,8 +306,8 @@ pub fn Video(
         if is_playing.get() {
             play();
         } else {
-            // pause();
-            precise_pause();
+            pause();
+            // precise_pause();
         }
     });
 
@@ -393,8 +395,8 @@ pub fn Video(
                 class="relative flex-auto cursor-pointer select-none"
                 on:contextmenu=move |ev| ev.prevent_default()
                 on:click=onclick_handler(on_click, on_dblclick)
-                on:dblclick=move |ev| ev.prevent_default()
             >
+                // on:dblclick=move |ev| ev.prevent_default()
                 <video
                     // controls
                     playsinline
