@@ -22,21 +22,21 @@ pub fn shell(options: LeptosOptions) -> impl IntoView {
                 <AutoReload options=options.clone() />
                 <HydrationScripts options />
 
-                <script>
-                    r#"
-                    if ('serviceWorker' in navigator) {
-                        window.addEventListener('load', () => {
-                            navigator.serviceWorker.register('/service-worker.js')
-                            .then(registration => {
-                                console.log('SW registered: ', registration);
-                            })
-                            .catch(registrationError => {
-                                console.log('SW registration failed: ', registrationError);
-                            });
-                        });
-                    }
-                    "#
-                </script>
+                // <script>
+                //     r#"
+                //     if ('serviceWorker' in navigator) {
+                //         window.addEventListener('load', () => {
+                //             navigator.serviceWorker.register('/service-worker.js')
+                //             .then(registration => {
+                //                 console.log('SW registered: ', registration);
+                //             })
+                //             .catch(registrationError => {
+                //                 console.log('SW registration failed: ', registrationError);
+                //             });
+                //         });
+                //     }
+                //     "#
+                // </script>
 
                 <Stylesheet id="leptos" href="/pkg/app.css" />
                 <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />

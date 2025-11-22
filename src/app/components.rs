@@ -1,2 +1,2 @@
 pub mod icon;
-pub mod video;
+pub mod video_player;

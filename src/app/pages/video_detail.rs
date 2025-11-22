@@ -1,4 +1,4 @@
-use crate::app::components::video::Video;
+use crate::app::components::video_player::VideoPlayer;
 use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
@@ -11,19 +11,19 @@ use leptos_router::{
 #[component]
 pub fn VideoDetail() -> impl IntoView {
     // Creates a reactive value to update the button
-    let count = RwSignal::new(0);
+    // let count = RwSignal::new(0);
     // let on_click = move |_| *count.write() += 1;
     view! {
         // <h1>"Welcome to Leptos!"</h1>
         // <button on:click=on_click class="font-sans">
         // "Click Me: "
-        // {count}
+        // {move || {
+        // let c = count.get();
+        // log!("{c}");
+        // c
+        // }}
         // </button>
 
-        // <Show when=move || {
-        // let c = count.get();
-        // c > 1 && c < 5
-        // }>
         <div class="p-0 w-full h-dvh">
             // <Video
             // src="https://download.blender.org/peach/bigbuckbunny_movies/big_buck_bunny_1080p_h264.mov"
@@ -31,10 +31,11 @@ pub fn VideoDetail() -> impl IntoView {
             // fps=24.0
             // />
 
-            <Video
-                src="Metallborne3.mp4"
+            <VideoPlayer
+                src="Metallborne3.mov"
                 proxy="Metallborne3_proxy.mp4"
                 fps=25.0
+                aspect_ratio=1.77
                 overlay_controls=false
             />
         </div>
