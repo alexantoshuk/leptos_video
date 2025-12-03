@@ -1,4 +1,4 @@
-use super::{frame_from_time, time_from_frame};
+use super::state::{AudioState, VideoMetadata};
 use crate::app::utils::*;
 use leptos::html;
 use leptos::logging::log;
@@ -10,36 +10,31 @@ use web_time::Duration;
 pub fn Video(
     video_ref: NodeRef<html::Video>,
     proxy_ref: NodeRef<html::Video>,
-    #[prop(into)] src: Signal<String>,
-    #[prop(into, optional)] proxy: Signal<String>,
-    #[prop(into)] fps: Signal<f64>,
     #[prop(into)] is_dragging: Signal<bool>,
     #[prop(into)] is_loop: Signal<bool>,
+    metadata: RwSignal<VideoMetadata>,
     frame: RwSignal<u32>,
-    end_frame: RwSignal<u32>,
     is_playing: RwSignal<bool>,
     is_waiting: RwSignal<bool>,
     progress: RwSignal<f64>,
     playback_rate: RwSignal<f64>,
-    volume: RwSignal<f64>,
-    is_mute: RwSignal<bool>,
+    audio_state: RwSignal<AudioState>,
 ) -> impl IntoView {
     let display_proxy = RwSignal::new(false);
+    let meta = metadata.read_only();
 
     let load_metadata = move || {
         if let Some(video) = video_ref.get_untracked() {
             let d = video.duration();
             if d.is_finite() {
-                let total_frames = (d * fps.get()).next_up() as u32;
-                end_frame.set((total_frames - 1).max(0));
+                metadata.write().set_duration(d);
             }
         }
     };
 
     let set_current_frame = move |video_ref: NodeRef<html::Video>, f: u32| {
         if let Some(video) = video_ref.get_untracked() {
-            let fps = fps.get_untracked();
-            let time = time_from_frame(f, fps);
+            let time = meta.read_untracked().time_from_frame(f);
             video.set_current_time(time);
         }
     };
@@ -48,16 +43,13 @@ pub fn Video(
         if let Some(video) = video_ref.get_untracked() {
             let vb = video.buffered();
             let time = video.current_time();
-            let fps = fps.get_untracked();
-            let end_frame = end_frame.get_untracked();
-            let total_frames = (end_frame + 1) as f64;
+            let d = video.duration();
+
             for i in (0..vb.length()).rev() {
                 let start = vb.start(i).unwrap();
                 let end = vb.end(i).unwrap();
                 if time >= start && time <= end {
-                    let f = frame_from_time(end, fps).min(end_frame) + 1;
-                    let p = f as f64 / total_frames;
-                    progress.set(p);
+                    progress.set(end / d);
                     break;
                 }
             }
@@ -66,7 +58,7 @@ pub fn Video(
 
     let is_ended = move || {
         let video = video_ref.get_untracked().unwrap();
-        video.ended() || frame.get_untracked() >= end_frame.get_untracked()
+        video.ended() || frame.get_untracked() >= meta.read_untracked().end_frame
     };
 
     let pause = move || {
@@ -79,9 +71,12 @@ pub fn Video(
     let precise_pause = move || {
         log!("precise_pause");
         if let Some(video) = video_ref.get_untracked() {
+            if video.paused() {
+                return;
+            }
             video.pause();
 
-            let fps = fps.get_untracked();
+            let fps = meta.read_untracked().fps;
             let d = video.duration();
             let timestep = 1.0 / fps;
             let t = video.current_time() + timestep;
@@ -94,12 +89,17 @@ pub fn Video(
             } else {
                 t
             };
-            video.set_current_time(t);
+            // video.set_current_time(t);
+            let f = meta.read_untracked().frame_from_time(t);
+            frame.set(f);
         }
     };
 
     let play = move || {
         if let Some(video) = video_ref.get_untracked() {
+            if !video.paused() {
+                return;
+            }
             if !is_loop.get_untracked() && is_ended() {
                 video.set_current_time(0.0);
             }
@@ -116,27 +116,19 @@ pub fn Video(
                 if is_dragging.get_untracked() || !is_playing.get_untracked() {
                     return;
                 }
-                let fps = fps.get_untracked();
-                let end_frame = end_frame.get_untracked();
-                let f = frame_from_time(time, fps).min(end_frame);
+                let f = meta.read_untracked().frame_from_time(time);
                 frame.set(f);
-
                 // log!("prcise time: {time}, frame: {f}");
             });
         }
     });
 
-    // is_mute
+    // audio state change
     Effect::new(move |_| {
         if let Some(video) = video_ref.get_untracked() {
-            video.set_muted(is_mute.get());
-        }
-    });
-
-    // volume
-    Effect::new(move |_| {
-        if let Some(video) = video_ref.get_untracked() {
-            video.set_volume(volume.get());
+            let audio_state = audio_state.get();
+            video.set_volume(audio_state.volume);
+            video.set_muted(audio_state.is_muted);
         }
     });
 
@@ -181,7 +173,7 @@ pub fn Video(
             // end dragging seek
             let f = frame.get_untracked();
             let f = if is_playing.get_untracked() {
-                (f + 1).min(end_frame.get_untracked())
+                meta.read_untracked().end_frame.min(f + 1)
             } else {
                 f
             };
@@ -200,6 +192,7 @@ pub fn Video(
             }
         } else if !is_playing.get_untracked() {
             // user set frame seek
+            // pause();
             set_current_frame(video_ref, f);
         }
     });
@@ -210,10 +203,10 @@ pub fn Video(
                 playsinline
                 disablepictureinpicture
                 node_ref=video_ref
-                src=src
+                src=move || meta.read().src.clone()
                 preload="metadata"
                 class="absolute size-full object-fill pointer-events-none"
-                // style=move || { if display_proxy.get() { "display:none;" } else { "" } }
+                class:hidden=move || display_proxy.get()
 
                 on:loadedmetadata=move |_| load_metadata()
                 on:durationchange=move |_| load_metadata()
@@ -228,12 +221,12 @@ pub fn Video(
                     }
                 }
                 on:waiting=move |_| {
-                    log!("Waiting video...");
                     set_timeout(
                         move || {
                             if let Some(video) = video_ref.get_untracked()
                                 && video.ready_state() <= HtmlMediaElement::HAVE_CURRENT_DATA
                             {
+                                log!("Waiting video...");
                                 is_waiting.set(true);
                             }
                         },
@@ -241,17 +234,19 @@ pub fn Video(
                     );
                 }
 
-                on:stalled=move |_| {}
+                on:stalled=move |_| {
+                    is_waiting.set(true);
+                }
                 // on:suspend=move |_| log!("suspend")
                 on:canplay=move |_| {
-                    is_waiting.set_changed(false);
+                    is_waiting.maybe_set(false);
                     update_preload_progress()
                 }
                 on:playing=move |_| {
-                    is_waiting.set_changed(false);
+                    is_waiting.maybe_set(false);
                 }
                 on:seeked=move |_| {
-                    display_proxy.set_changed(false);
+                    display_proxy.maybe_set(false);
                     if let Some(video) = video_ref.get_untracked() {
                         if !video.paused() {
                             return;
@@ -262,18 +257,18 @@ pub fn Video(
                     }
                 }
             />
-            <Show when=move || proxy.get() != "">
+            <Show when=move || meta.read().proxy.is_some()>
                 <video
                     playsinline
                     disablepictureinpicture
                     node_ref=proxy_ref
-                    src=proxy
+                    src=move || meta.read().proxy.clone().unwrap()
                     preload="auto"
                     class="absolute size-full object-fill pointer-events-none"
-                    class:opacity-0=move || !display_proxy.get()
+                    class:hidden=move || !display_proxy.get()
                     on:seeked=move |_| {
                         if is_dragging.get_untracked() {
-                            display_proxy.set_changed(true);
+                            display_proxy.maybe_set(true);
                         }
                     }
                 />
@@ -281,7 +276,3 @@ pub fn Video(
         </>
     }
 }
-
-// fn frame_from_time(time: f64, fps: f64) -> u32 {
-//     (time * fps + 0.01) as u32
-// }

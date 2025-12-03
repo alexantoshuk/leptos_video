@@ -5,17 +5,21 @@ use leptos_use::utils::Pausable;
 use web_sys::{Element, HtmlVideoElement, MouseEvent};
 use web_time::{Duration, Instant};
 
-pub trait RwSignalEx<T> {
-    fn set_changed(&self, value: T);
-}
-
-impl<T: Clone + Send + Sync + PartialEq + 'static> RwSignalEx<T> for RwSignal<T> {
-    fn set_changed(&self, value: T) {
-        if self.get_untracked() != value {
-            self.set(value);
-        }
+pub trait WriteSignalEx<T: PartialEq>: Update<Value = T> {
+    fn maybe_set(&self, value: T) {
+        self.maybe_update(|old| {
+            if *old != value {
+                *old = value;
+                true
+            } else {
+                false
+            }
+        });
     }
 }
+
+impl<T> WriteSignalEx<T> for RwSignal<T> where T: Send + Sync + PartialEq + 'static {}
+impl<T> WriteSignalEx<T> for WriteSignal<T> where T: Send + Sync + PartialEq + 'static {}
 
 pub fn onclick_handler(
     on_click: impl FnOnce(MouseEvent) + 'static + Copy,

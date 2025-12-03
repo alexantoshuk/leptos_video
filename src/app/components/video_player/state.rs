@@ -1,0 +1,202 @@
+use crate::app::timecode::*;
+use crate::app::utils::*;
+use leptos::prelude::*;
+use smart_default::SmartDefault;
+
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub enum WaitingState {
+    #[default]
+    Ready, // Not waiting
+    Buffering, // Waiting for more data
+    Loading,   // Initial load
+    Seeking,   // Wait for seek to complete
+    Stalled,   // Playback stalled
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct VideoMetadata {
+    pub src: String,
+    pub proxy: Option<String>,
+    pub poster: Option<String>,
+    pub fps: f64,
+    pub aspect_ratio: f64,
+    pub end_frame: u32,
+}
+
+impl VideoMetadata {
+    pub fn set_duration(&mut self, duration: f64) {
+        let total_frames = frame_from_time(duration, self.fps);
+        self.end_frame = total_frames.saturating_sub(1);
+    }
+
+    pub fn frame_from_time(&self, time: f64) -> u32 {
+        frame_from_time(time, self.fps).min(self.end_frame)
+    }
+
+    pub fn frame_from_pos(&self, pos: f64) -> u32 {
+        frame_from_pos(pos, self.end_frame)
+    }
+
+    pub fn time_from_frame(&self, frame: u32) -> f64 {
+        time_from_frame(frame.min(self.end_frame), self.fps)
+    }
+
+    pub fn duration(&self) -> f64 {
+        time_from_frame(self.end_frame, self.fps)
+    }
+
+    pub fn timecode_fmt(&self, frame: u32, time_format: TimeFormat) -> String {
+        match time_format {
+            TimeFormat::Frames => frame.to_string(),
+            TimeFormat::Timecode => self.timecode(frame),
+        }
+    }
+
+    pub fn end_timecode_fmt(&self, time_format: TimeFormat) -> String {
+        match time_format {
+            TimeFormat::Frames => self.end_frame.to_string(),
+            TimeFormat::Timecode => self.end_timecode(),
+        }
+    }
+
+    pub fn timecode(&self, frame: u32) -> String {
+        let show_hours = Timecode::hours(self.end_frame, self.fps) != 0;
+        let t = Timecode::from_frame(frame, self.fps);
+        t.to_string_opt(show_hours, true)
+    }
+
+    pub fn end_timecode(&self) -> String {
+        self.timecode(self.end_frame)
+    }
+
+    pub fn progress(&self, frame: u32) -> f64 {
+        frame as f64 / (self.end_frame + 1) as f64
+    }
+}
+
+#[derive(Clone, Debug, SmartDefault, PartialEq)]
+pub struct AudioState {
+    #[default = 1.0]
+    pub volume: f64,
+    pub is_muted: bool,
+}
+
+impl AudioState {
+    pub fn set_volume(&mut self, volume: f64) {
+        let volume = volume.clamp(0.0, 1.0);
+        if volume > 0.0 {
+            self.is_muted = false;
+        }
+        self.volume = volume;
+    }
+
+    pub fn set_muted(&mut self, mute: bool) {
+        if !mute && self.volume == 0.0 {
+            self.volume = 1.0;
+        }
+        self.is_muted = mute;
+    }
+
+    pub fn toggle_mute(&mut self) {
+        self.set_muted(!self.is_muted());
+    }
+
+    pub fn is_muted(&self) -> bool {
+        self.is_muted || self.volume <= 0.0
+    }
+
+    pub fn volume(&self) -> f64 {
+        if self.is_muted { 0.0 } else { self.volume }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum TimeFormat {
+    #[default]
+    Frames,
+    Timecode,
+}
+
+pub struct VideoPlaybackState {
+    metadata: ReadSignal<VideoMetadata>,
+    is_playing: RwSignal<bool>,
+    is_dragging: RwSignal<bool>,
+    frame: RwSignal<u32>,
+}
+
+impl VideoPlaybackState {
+    pub fn is_playing(&self) -> bool {
+        self.is_playing.get_untracked() && !self.is_dragging.get_untracked()
+    }
+
+    pub fn is_ended(&self) -> bool {
+        let f = self.frame.get_untracked();
+        let end_frame = self.metadata.read_untracked().end_frame;
+        f >= end_frame
+    }
+
+    pub fn seek_to_prev_frame(&self) {
+        self.is_playing.maybe_set(false);
+        self.frame.maybe_update(|f| {
+            if *f == 0 {
+                false
+            } else {
+                *f -= 1;
+                true
+            }
+        });
+    }
+
+    pub fn seek_to_next_frame(&self) {
+        self.is_playing.maybe_set(false);
+        let end_frame = self.metadata.read_untracked().end_frame;
+        self.frame.maybe_update(|f| {
+            if *f >= end_frame {
+                false
+            } else {
+                *f += 1;
+                true
+            }
+        });
+    }
+
+    pub fn seek_to_frame(&self, f: u32) {
+        let end_frame = self.metadata.read_untracked().end_frame;
+        self.frame.set(f.min(end_frame));
+    }
+}
+
+pub fn frame_from_time(time: f64, fps: f64) -> u32 {
+    (time * fps + 0.01) as u32
+}
+
+pub fn frame_from_pos(pos: f64, end_frame: u32) -> u32 {
+    let pos = pos.max(0.0);
+    let total_frames = end_frame + 1;
+    ((pos * total_frames as f64 + 0.01) as u32).min(end_frame)
+}
+
+pub fn time_from_frame(frame: u32, fps: f64) -> f64 {
+    (frame as f64 + 0.01) / fps
+}
+
+pub fn calc_video_box(
+    container_width: f64,
+    container_height: f64,
+    video_aspect: f64,
+) -> (f64, f64, f64, f64) {
+    let container_aspect = container_width / container_height;
+    if video_aspect < container_aspect {
+        let w = video_aspect * container_height;
+        let h = container_height;
+        let x = (container_width - w) / 2.0;
+        let y = 0.0;
+        (w, h, x, y)
+    } else {
+        let w = container_width;
+        let h = container_width / video_aspect;
+        let x = 0.0;
+        let y = (container_height - h) / 2.0;
+        (w, h, x, y)
+    }
+}
