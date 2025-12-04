@@ -1,11 +1,11 @@
 const CACHE_NAME = "pwa-cache-v1";
 const urlsToCache = [
   "/",
-  "/pkg/app.js", // Adjust these paths based on your cargo-leptos build output
-  "/pkg/app.wasm",
-  "/pkg/app.css",
-  "/manifest.json",
-  "/favicon.svg",
+  "/leptos_video.js", // Adjust these paths based on your cargo-leptos build output
+  "/leptos_video_bg.wasm",
+  "/app.css",
+  "/icon/favicon.ico",
+  "/icon/favicon.svg",
   // Add other static assets you want to pre-cache (CSS files, etc.)
 ];
 

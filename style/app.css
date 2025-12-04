@@ -7,8 +7,9 @@
 @plugin "@tailwindcss/typography";
 @plugin "./daisyui.mjs" {
     themes:
-        nord --default,
-        night --prefersdark,
+        cupcake --default,
+        dracula --prefersdark,
+        nord,
         cupcake,
         dracula;
 }
@@ -57,12 +58,14 @@
         btn-ghost
         text-neutral-300
         hover:bg-white/0
+        hover:outline-none
         hover:brightness-130
         active:brightness-130
         active:bg-white/0
         border-none
         outline-none
         cursor-pointer
+        shadow-none
         drop-shadow-ico
         transition-colors
         duration-200;

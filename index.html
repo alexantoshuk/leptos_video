@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <!--<script>
+            if ("serviceWorker" in navigator) {
+                window.addEventListener("load", () => {
+                    navigator.serviceWorker
+                        .register("/service-worker.js")
+                        .then((registration) => {
+                            console.log("SW registered: ", registration);
+                        })
+                        .catch((registrationError) => {
+                            console.log(
+                                "SW registration failed: ",
+                                registrationError,
+                            );
+                        });
+                });
+            }
+        </script>-->
+
+        <link data-trunk rel="copy-dir" href="video" />
+        <link data-trunk rel="copy-dir" href="public/icons" />
+        <link data-trunk rel="copy-file" href="public/manifest.json" />
+        <link data-trunk rel="copy-file" href="public/service-worker.js" />
+        <link data-trunk rel="tailwind-css" href="style/app.css" />
+
+        <!--<link rel="manifest" href="manifest.json" />-->
+        <link
+            data-trunk
+            rel="icon"
+            href="public/favicon.ico"
+            data-integrity="none"
+        />
+        <!-- include support for `wasm-bindgen --weak-refs` - see: https://rustwasm.github.io/docs/wasm-bindgen/reference/weak-references.html -->
+        <link data-trunk rel="rust" data-wasm-opt="z" data-weak-refs />
+    </head>
+
+    <body></body>
+</html>

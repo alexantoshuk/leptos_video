@@ -3,18 +3,18 @@ mod controls;
 pub mod state;
 mod video;
 use super::icon;
-use crate::app::utils::*;
+use crate::utils::*;
 use controls::Controls;
 use leptos::html;
 use leptos::prelude::*;
 use leptos_use::{UseElementSizeReturn, use_element_size, use_throttle_fn_with_arg};
-use state::{AudioState, TimeFormat, VideoMetadata, calc_video_box};
+use state::{AudioState, TimeFormat, VideoInfo, calc_video_box};
 use video::Video;
 use web_time::Duration;
 
 #[component]
 pub fn VideoPlayer(
-    metadata: RwSignal<VideoMetadata>,
+    videoinfo: RwSignal<VideoInfo>,
     #[prop(into, optional)] overlay_controls: Signal<bool>,
 ) -> impl IntoView {
     let container_ref = NodeRef::<html::Div>::new();
@@ -51,7 +51,7 @@ pub fn VideoPlayer(
 
     let next_frame = move || {
         is_playing.maybe_set(false);
-        let end_frame = metadata.read_untracked().end_frame;
+        let end_frame = videoinfo.read_untracked().end_frame;
         frame.maybe_update(|f| {
             if *f >= end_frame {
                 false
@@ -178,7 +178,7 @@ pub fn VideoPlayer(
                 <div
                     class="absolute"
                     style=move || {
-                        let aspect_ratio = metadata.read().aspect_ratio;
+                        let aspect_ratio = videoinfo.read().aspect_ratio;
                         let (w, h, x, y) = calc_video_box(
                             video_container_width.get(),
                             video_container_height.get(),
@@ -191,7 +191,7 @@ pub fn VideoPlayer(
                     <Video
                         video_ref
                         proxy_ref
-                        metadata
+                        videoinfo
                         frame
                         is_playing
                         is_loop
@@ -246,7 +246,7 @@ pub fn VideoPlayer(
                 >
                     <Controls
                         proxy_ref
-                        metadata
+                        videoinfo
                         progress
                         overlay
                         frame

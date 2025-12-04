@@ -1,5 +1,5 @@
-use crate::app::components::video_player::VideoPlayer;
-use crate::app::components::video_player::state::VideoMetadata;
+use crate::components::video_player::{VideoPlayer, state::VideoInfo};
+
 use leptos::prelude::*;
 use leptos::{attr::Default, logging::log};
 use leptos_meta::{MetaTags, Stylesheet, Title, provide_meta_context};
@@ -14,13 +14,14 @@ pub fn VideoDetail() -> impl IntoView {
     // Creates a reactive value to update the button
     // let count = RwSignal::new(0);
     // let on_click = move |_| *count.write() += 1;
-    let metadata = RwSignal::new(VideoMetadata {
-        src: "Metallborne3.mov".into(),
-        proxy: Some("Metallborne3_proxy.mp4".into()),
+    let videoinfo = RwSignal::new(VideoInfo {
+        src: "video/Metallborne3.mp4".into(),
+        proxy: Some("video/Metallborne3_proxy.mp4".into()),
         fps: 25.0,
         aspect_ratio: 1.77,
-        ..VideoMetadata::default()
+        ..VideoInfo::default()
     });
+
     view! {
         // <h1>"Welcome to Leptos!"</h1>
         // <button on:click=on_click class="font-sans">
@@ -39,7 +40,7 @@ pub fn VideoDetail() -> impl IntoView {
             // fps=24.0
             // />
 
-            <VideoPlayer metadata overlay_controls=false />
+            <VideoPlayer videoinfo overlay_controls=false />
         </div>
     }
 }

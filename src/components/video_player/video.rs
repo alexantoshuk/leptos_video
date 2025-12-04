@@ -1,5 +1,5 @@
-use super::state::{AudioState, VideoMetadata};
-use crate::app::utils::*;
+use super::state::{AudioState, VideoInfo};
+use crate::utils::*;
 use leptos::html;
 use leptos::logging::log;
 use leptos::prelude::*;
@@ -12,7 +12,7 @@ pub fn Video(
     proxy_ref: NodeRef<html::Video>,
     #[prop(into)] is_dragging: Signal<bool>,
     #[prop(into)] is_loop: Signal<bool>,
-    metadata: RwSignal<VideoMetadata>,
+    videoinfo: RwSignal<VideoInfo>,
     frame: RwSignal<u32>,
     is_playing: RwSignal<bool>,
     is_waiting: RwSignal<bool>,
@@ -21,13 +21,13 @@ pub fn Video(
     audio_state: RwSignal<AudioState>,
 ) -> impl IntoView {
     let display_proxy = RwSignal::new(false);
-    let meta = metadata.read_only();
+    let meta = videoinfo.read_only();
 
     let load_metadata = move || {
         if let Some(video) = video_ref.get_untracked() {
             let d = video.duration();
             if d.is_finite() {
-                metadata.write().set_duration(d);
+                videoinfo.write().set_duration(d);
             }
         }
     };
@@ -81,17 +81,13 @@ pub fn Video(
             let timestep = 1.0 / fps;
             let t = video.current_time() + timestep;
             let t = if t > d {
-                if is_loop.get_untracked() {
-                    t % d
-                } else {
-                    t.min(d)
-                }
+                if is_loop.get_untracked() { t % d } else { d }
             } else {
                 t
             };
-            // video.set_current_time(t);
-            let f = meta.read_untracked().frame_from_time(t);
-            frame.set(f);
+            video.set_current_time(t);
+            // let f = meta.read_untracked().frame_from_time(t);
+            // frame.set(f);
         }
     };
 
@@ -217,7 +213,7 @@ pub fn Video(
                 on:progress=move |_| { update_preload_progress() }
                 on:ended=move |_| {
                     if !is_dragging.get_untracked() {
-                        is_playing.set(false);
+                        is_playing.maybe_set(false);
                     }
                 }
                 on:waiting=move |_| {

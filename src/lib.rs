@@ -1,32 +1,40 @@
-#![recursion_limit = "256"]
-pub mod app;
+mod components;
+mod pages;
+mod timecode;
+mod utils;
 
-#[cfg_attr(feature = "csr", wasm_bindgen::prelude::wasm_bindgen)]
-pub fn hydrate() {
-    use crate::app::*;
-    console_error_panic_hook::set_once();
-    leptos::mount::mount_to_body(App);
+use leptos::prelude::*;
+use leptos_meta::*;
+use leptos_router::{components::*, path};
+
+use pages::VideoDetail;
+
+/// An app router which renders the homepage and handles 404's
+#[component]
+pub fn App() -> impl IntoView {
+    // Provides context that manages stylesheets, titles, meta tags, etc.
+    provide_meta_context();
+
+    view! {
+        <Html attr:lang="en" attr:dir="ltr" />
+
+        // sets the document title
+        <Title text="Welcome to Leptos CSR" />
+
+        // injects metadata in the <head> of the page
+        // <Meta charset="UTF-8" />
+        // <Meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        <Router>
+            <Routes fallback=|| view! { NotFound }>
+                <Route path=path!("/") view=VideoDetail />
+            </Routes>
+        </Router>
+    }
 }
 
-macro_rules! get {
-    ($signal:ident.$field:ident) => {
-        $signal.with(|$signal| $signal.$field)
-    };
-    ($signal:ident) => {
-        $signal.get()
-    };
+/// 404 Not Found Page
+#[component]
+pub fn NotFound() -> impl IntoView {
+    view! { <h1>"Uh oh!" <br /> "We couldn't find that page!"</h1> }
 }
-pub(crate) use get;
-
-macro_rules! get_untracked {
-    ($signal:ident.$field:ident($($a:expr),*)) => {
-        $signal.with_untracked(|$signal| $signal.$field($($a),*))
-    };
-    ($signal:ident.$field:ident) => {
-        $signal.with_untracked(|$signal| $signal.$field)
-    };
-    ($signal:ident) => {
-        $signal.get_untracked()
-    };
-}
-pub(crate) use get_untracked;

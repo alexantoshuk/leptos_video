@@ -1,6 +1,6 @@
 use super::icon;
-use super::{AudioState, TimeFormat, VideoMetadata};
-use crate::app::utils::*;
+use super::{AudioState, TimeFormat, VideoInfo};
+use crate::utils::*;
 use leptos::either::*;
 use leptos::html;
 use leptos::logging::log;
@@ -14,7 +14,7 @@ const THUMB_MAX_SIZE: i32 = 200;
 #[component]
 pub fn Controls(
     proxy_ref: NodeRef<html::Video>,
-    #[prop(into)] metadata: Signal<VideoMetadata>,
+    #[prop(into)] videoinfo: Signal<VideoInfo>,
     #[prop(into)] progress: Signal<f64>,
     #[prop(into)] overlay: Signal<bool>,
     frame: RwSignal<u32>,
@@ -28,7 +28,7 @@ pub fn Controls(
 ) -> impl IntoView {
     let next_frame = move || {
         is_playing.maybe_set(false);
-        let end_frame = metadata.read_untracked().end_frame;
+        let end_frame = videoinfo.read_untracked().end_frame;
         frame.maybe_update(|f| {
             if *f >= end_frame {
                 false
@@ -53,7 +53,7 @@ pub fn Controls(
 
     view! {
         <div class="flex-col space-y-1">
-            <ProgressBar proxy_ref metadata frame overlay is_dragging progress time_format />
+            <ProgressBar proxy_ref videoinfo frame overlay is_dragging progress time_format />
 
             // <div class="flex items-center justify-between h-4"></div>
             // Control buttons
@@ -69,13 +69,13 @@ pub fn Controls(
 
                 // Center
                 <div class="shrink flex items-center min-w-0">
-                    <TimecodeControl metadata frame time_format />
+                    <TimecodeControl videoinfo frame time_format />
                 </div>
 
                 // Right side
                 <div class="shrink-0 flex items-center space-x-0">
-                    <span class="mr-2 text-base font-medium text-gray-500 text-nowrap drop-shadow-ico hidden @3xl:block">
-                        {move || format!("{}fps", metadata.read().fps)}
+                    <span class="mr-2 text-base font-medium text-gray-400 text-nowrap drop-shadow-ico hidden @3xl:block">
+                        {move || format!("{}fps", videoinfo.read().fps)}
                     </span>
                     <Settings />
                     <FullscreenToggle is_fullscreen />
@@ -88,7 +88,7 @@ pub fn Controls(
 #[component]
 fn ProgressBar(
     proxy_ref: NodeRef<html::Video>,
-    #[prop(into)] metadata: Signal<VideoMetadata>,
+    #[prop(into)] videoinfo: Signal<VideoInfo>,
     #[prop(into)] progress: Signal<f64>,
     #[prop(into)] overlay: Signal<bool>,
     #[prop(into)] time_format: Signal<TimeFormat>,
@@ -128,7 +128,7 @@ fn ProgressBar(
             && let Some(canvas) = thumb_canvas_ref.get_untracked()
         {
             let thumb_frame = thumb_frame.get();
-            let time = metadata.read_untracked().time_from_frame(thumb_frame);
+            let time = videoinfo.read_untracked().time_from_frame(thumb_frame);
             proxy_video.set_current_time(time);
 
             if let Ok(Some(ctx)) = canvas.get_context("2d") {
@@ -154,7 +154,7 @@ fn ProgressBar(
 
                 if let Some(p) = node_ref.get_untracked() {
                     let pos = args.event.offset_x() as f64 / p.client_width() as f64;
-                    let f = metadata.read_untracked().frame_from_pos(pos);
+                    let f = videoinfo.read_untracked().frame_from_pos(pos);
                     frame.set(f);
                     // let result = on_dragging_start(f);
                     if args.event.pointer_type() == "touch" {
@@ -170,7 +170,7 @@ fn ProgressBar(
                 if let Some(p) = node_ref.get_untracked() {
                     let x = args.event.client_x() - p.get_bounding_client_rect().left() as i32;
                     let pos = x as f64 / p.client_width() as f64;
-                    let f = metadata.read_untracked().frame_from_pos(pos);
+                    let f = videoinfo.read_untracked().frame_from_pos(pos);
                     set_frame_throttled(f);
                     // on_dragging_move(f);
                 }
@@ -181,7 +181,7 @@ fn ProgressBar(
                     hover.set(Hover::Exit(x));
                     is_dragging.set(false);
                     let pos = x as f64 / p.client_width() as f64;
-                    let f = metadata.read_untracked().frame_from_pos(pos);
+                    let f = videoinfo.read_untracked().frame_from_pos(pos);
                     frame.set(f);
                     // on_dragging_end(f);
                 }
@@ -206,7 +206,7 @@ fn ProgressBar(
                     let x = ev.offset_x();
                     if let Some(p) = node_ref.get_untracked() {
                         let pos = x as f64 / p.client_width() as f64;
-                        let f = metadata.read_untracked().frame_from_pos(pos);
+                        let f = videoinfo.read_untracked().frame_from_pos(pos);
                         set_thumb_frame_throttled(f);
                     }
                     hover.set(Hover::Move(x));
@@ -229,7 +229,7 @@ fn ProgressBar(
                 <div
                     class="absolute origin-left size-full bg-primary pointer-events-none"
                     style:scale=move || {
-                        let p = metadata.read().progress(frame.get());
+                        let p = videoinfo.read().progress(frame.get());
                         format!("{} 1", p)
                     }
                 />
@@ -238,14 +238,14 @@ fn ProgressBar(
                 <div
                     class="absolute origin-left size-full pointer-events-none"
                     style:translate=move || {
-                        let end_frame = metadata.read().end_frame;
+                        let end_frame = videoinfo.read().end_frame;
                         format!("{}% 0", (100 * frame.get()) as f64 / (end_frame + 1) as f64)
                     }
                 >
                     <div
                         class="h-full origin-left bg-white pointer-events-none"
                         style:width=move || {
-                            let end_frame = metadata.read().end_frame;
+                            let end_frame = videoinfo.read().end_frame;
                             if end_frame == 0 {
                                 "0".into()
                             } else {
@@ -261,7 +261,7 @@ fn ProgressBar(
                 style=move || {
                     if let Some(p) = node_ref.get_untracked() {
                         let p_width = p.client_width();
-                        let aspect_ratio = metadata.read().aspect_ratio;
+                        let aspect_ratio = videoinfo.read().aspect_ratio;
                         let (w, h) = thumbnail_size(aspect_ratio);
                         if w == 0 {
                             return "opacity:0".into();
@@ -282,14 +282,16 @@ fn ProgressBar(
                 <div class="rounded-sm outline-solid outline-2 outline-neutral-300 drop-shadow-xl/50
                 overflow-hidden ">
                     {move || {
-                        let aspect_ratio = metadata.read().aspect_ratio;
+                        let aspect_ratio = videoinfo.read().aspect_ratio;
                         let (w, h) = thumbnail_size(aspect_ratio);
                         view! { <canvas node_ref=thumb_canvas_ref width=w height=h></canvas> }
                     }}
 
                 </div>
                 <div class="text-base font-bold drop-shadow-ico text-neutral-300 text-center">
-                    {move || { metadata.read().timecode_fmt(thumb_frame.get(), time_format.get()) }}
+                    {move || {
+                        videoinfo.read().timecode_fmt(thumb_frame.get(), time_format.get())
+                    }}
                 </div>
             </div>
         </div>
@@ -474,18 +476,18 @@ fn VolumeControl(audio_state: RwSignal<AudioState>) -> impl IntoView {
 fn TimecodeControl(
     time_format: RwSignal<TimeFormat>,
     #[prop(into)] frame: Signal<u32>,
-    #[prop(into)] metadata: Signal<VideoMetadata>,
+    #[prop(into)] videoinfo: Signal<VideoInfo>,
 ) -> impl IntoView {
     view! {
         // Time display
         <div class="dropdown dropdown-top dropdown-center">
             <button tabindex="0" class="btn-player text-sm @lg:text-base font-medium">
                 <span class="text-gray-300">
-                    {move || metadata.read().timecode_fmt(frame.get(), time_format.get())}
+                    {move || videoinfo.read().timecode_fmt(frame.get(), time_format.get())}
                 </span>
-                <span class="text-gray-500">/</span>
-                <span class="text-gray-500">
-                    {move || metadata.read().end_timecode_fmt(time_format.get())}
+                <span class="text-gray-400">/</span>
+                <span class="text-gray-400">
+                    {move || videoinfo.read().end_timecode_fmt(time_format.get())}
                 </span>
             </button>
 

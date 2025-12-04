@@ -1,21 +1,16 @@
 {
-  "name": "My Frame.io-like App",
-  "short_name": "VideoEditor",
-  "description": "A video editing PWA built with Leptos",
+  "name": "Video Review App",
+  "short_name": "VideoReview",
+  "description": "A Video Review App PWA built with Leptos",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",
   "icons": [
     {
-      "src": "favicon.svg",
+      "src": "icons/favicon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
-    },
-    {
-      "src": "favicon.ico",
-      "sizes": "48x48",
-      "type": "image/x-icon"
     }
   ]
 }

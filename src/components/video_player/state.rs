@@ -1,5 +1,5 @@
-use crate::app::timecode::*;
-use crate::app::utils::*;
+use crate::timecode::*;
+use crate::utils::*;
 use leptos::prelude::*;
 use smart_default::SmartDefault;
 
@@ -14,7 +14,7 @@ pub enum WaitingState {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct VideoMetadata {
+pub struct VideoInfo {
     pub src: String,
     pub proxy: Option<String>,
     pub poster: Option<String>,
@@ -23,7 +23,7 @@ pub struct VideoMetadata {
     pub end_frame: u32,
 }
 
-impl VideoMetadata {
+impl VideoInfo {
     pub fn set_duration(&mut self, duration: f64) {
         let total_frames = frame_from_time(duration, self.fps);
         self.end_frame = total_frames.saturating_sub(1);
@@ -118,7 +118,7 @@ pub enum TimeFormat {
 }
 
 pub struct VideoPlaybackState {
-    metadata: ReadSignal<VideoMetadata>,
+    videoinfo: ReadSignal<VideoInfo>,
     is_playing: RwSignal<bool>,
     is_dragging: RwSignal<bool>,
     frame: RwSignal<u32>,
@@ -131,7 +131,7 @@ impl VideoPlaybackState {
 
     pub fn is_ended(&self) -> bool {
         let f = self.frame.get_untracked();
-        let end_frame = self.metadata.read_untracked().end_frame;
+        let end_frame = self.videoinfo.read_untracked().end_frame;
         f >= end_frame
     }
 
@@ -149,7 +149,7 @@ impl VideoPlaybackState {
 
     pub fn seek_to_next_frame(&self) {
         self.is_playing.maybe_set(false);
-        let end_frame = self.metadata.read_untracked().end_frame;
+        let end_frame = self.videoinfo.read_untracked().end_frame;
         self.frame.maybe_update(|f| {
             if *f >= end_frame {
                 false
@@ -161,7 +161,7 @@ impl VideoPlaybackState {
     }
 
     pub fn seek_to_frame(&self, f: u32) {
-        let end_frame = self.metadata.read_untracked().end_frame;
+        let end_frame = self.videoinfo.read_untracked().end_frame;
         self.frame.set(f.min(end_frame));
     }
 }
