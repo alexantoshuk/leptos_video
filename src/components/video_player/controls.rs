@@ -289,9 +289,7 @@ fn ProgressBar(
 
                 </div>
                 <div class="text-base font-bold drop-shadow-ico text-neutral-300 text-center">
-                    {move || {
-                        videoinfo.read().timecode_fmt(thumb_frame.get(), time_format.get())
-                    }}
+                    {move || { videoinfo.read().time_string(thumb_frame.get(), time_format.get()) }}
                 </div>
             </div>
         </div>
@@ -483,11 +481,11 @@ fn TimecodeControl(
         <div class="dropdown dropdown-top dropdown-center">
             <button tabindex="0" class="btn-player text-sm @lg:text-base font-medium">
                 <span class="text-gray-300">
-                    {move || videoinfo.read().timecode_fmt(frame.get(), time_format.get())}
+                    {move || videoinfo.read().time_string(frame.get(), time_format.get())}
                 </span>
                 <span class="text-gray-400">/</span>
                 <span class="text-gray-400">
-                    {move || videoinfo.read().end_timecode_fmt(time_format.get())}
+                    {move || videoinfo.read().end_time_string(time_format.get())}
                 </span>
             </button>
 

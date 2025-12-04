@@ -45,28 +45,28 @@ impl VideoInfo {
         time_from_frame(self.end_frame, self.fps)
     }
 
-    pub fn timecode_fmt(&self, frame: u32, time_format: TimeFormat) -> String {
+    pub fn time_string(&self, frame: u32, time_format: TimeFormat) -> String {
         match time_format {
             TimeFormat::Frames => frame.to_string(),
-            TimeFormat::Timecode => self.timecode(frame),
+            TimeFormat::Timecode => self.timecode_string(frame),
         }
     }
 
-    pub fn end_timecode_fmt(&self, time_format: TimeFormat) -> String {
+    pub fn end_time_string(&self, time_format: TimeFormat) -> String {
         match time_format {
             TimeFormat::Frames => self.end_frame.to_string(),
-            TimeFormat::Timecode => self.end_timecode(),
+            TimeFormat::Timecode => self.end_timecode_string(),
         }
     }
 
-    pub fn timecode(&self, frame: u32) -> String {
+    pub fn timecode_string(&self, frame: u32) -> String {
         let show_hours = Timecode::hours(self.end_frame, self.fps) != 0;
         let t = Timecode::from_frame(frame, self.fps);
         t.to_string_opt(show_hours, true)
     }
 
-    pub fn end_timecode(&self) -> String {
-        self.timecode(self.end_frame)
+    pub fn end_timecode_string(&self) -> String {
+        self.timecode_string(self.end_frame)
     }
 
     pub fn progress(&self, frame: u32) -> f64 {
