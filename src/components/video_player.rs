@@ -8,7 +8,7 @@ use controls::Controls;
 use leptos::html;
 use leptos::prelude::*;
 use leptos_use::{UseElementSizeReturn, use_element_size, use_throttle_fn_with_arg};
-use state::{AudioState, TimeFormat, VideoInfo, calc_video_box};
+use state::{AudioState, PlayingState, TimeFormat, VideoInfo, calc_video_box};
 use video::Video;
 use web_time::Duration;
 
@@ -28,7 +28,7 @@ pub fn VideoPlayer(
     let time_format = RwSignal::new(TimeFormat::default());
     let progress = RwSignal::new(0.0);
     let audio_state = RwSignal::new(AudioState::default());
-    let is_playing = RwSignal::new(false);
+    let playing = RwSignal::new(PlayingState::Pause);
     let is_loop = RwSignal::new(false);
     let is_dragging = RwSignal::new(false);
     let is_fullscreen = RwSignal::new(false);
@@ -42,7 +42,7 @@ pub fn VideoPlayer(
     } = use_element_size(video_container_ref);
 
     let toggle_play = move || {
-        is_playing.update(|p| *p = !*p);
+        playing.write().toggle_play();
     };
 
     let toggle_fullscreen = move || {
@@ -50,7 +50,7 @@ pub fn VideoPlayer(
     };
 
     let next_frame = move || {
-        is_playing.maybe_set(false);
+        playing.maybe_set(PlayingState::Pause);
         let end_frame = videoinfo.read_untracked().end_frame;
         frame.maybe_update(|f| {
             if *f >= end_frame {
@@ -63,7 +63,7 @@ pub fn VideoPlayer(
     };
 
     let prev_frame = move || {
-        is_playing.maybe_set(false);
+        playing.maybe_set(PlayingState::Pause);
         frame.maybe_update(|f| {
             if *f == 0 {
                 false
@@ -193,7 +193,7 @@ pub fn VideoPlayer(
                         proxy_ref
                         videoinfo
                         frame
-                        is_playing
+                        playing
                         is_loop
                         is_dragging
                         is_waiting
@@ -252,7 +252,7 @@ pub fn VideoPlayer(
                         frame
                         playback_rate
                         is_dragging
-                        is_playing
+                        playing
                         is_loop
                         audio_state
                         is_fullscreen

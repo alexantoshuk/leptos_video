@@ -1,5 +1,5 @@
 use super::icon;
-use super::{AudioState, TimeFormat, VideoInfo};
+use super::state::{AudioState, PlayingState, TimeFormat, VideoInfo};
 use crate::utils::*;
 use leptos::either::*;
 use leptos::html;
@@ -20,14 +20,14 @@ pub fn Controls(
     frame: RwSignal<u32>,
     playback_rate: RwSignal<f64>,
     is_dragging: RwSignal<bool>,
-    is_playing: RwSignal<bool>,
+    playing: RwSignal<PlayingState>,
     is_loop: RwSignal<bool>,
     audio_state: RwSignal<AudioState>,
     is_fullscreen: RwSignal<bool>,
     time_format: RwSignal<TimeFormat>,
 ) -> impl IntoView {
     let next_frame = move || {
-        is_playing.maybe_set(false);
+        playing.maybe_set(PlayingState::Pause);
         let end_frame = videoinfo.read_untracked().end_frame;
         frame.maybe_update(|f| {
             if *f >= end_frame {
@@ -40,7 +40,7 @@ pub fn Controls(
     };
 
     let prev_frame = move || {
-        is_playing.maybe_set(false);
+        playing.maybe_set(PlayingState::Pause);
         frame.maybe_update(|f| {
             if *f == 0 {
                 false
@@ -60,7 +60,7 @@ pub fn Controls(
             <div class="flex items-center justify-between">
                 // Left side
                 <div class="shrink-0 flex items-center">
-                    <PlayPauseToggle is_playing />
+                    <PlayPauseToggle playing />
                     <PlybackRateControl playback_rate />
                     // <PrevNextFrameButtonsGrp on_prev_click=prev_frame on_next_click=next_frame />
                     <LoopToggle is_loop />
@@ -297,16 +297,16 @@ fn ProgressBar(
 }
 
 #[component]
-fn PlayPauseToggle(is_playing: RwSignal<bool>) -> impl IntoView {
+fn PlayPauseToggle(playing: RwSignal<PlayingState>) -> impl IntoView {
     view! {
         <button
             class="btn-player size-10 p-1"
             type="button"
-            on:click=move |_| is_playing.update(|p| *p = !*p)
+            on:click=move |_| playing.write().toggle_play()
             on:keydown=move |ev| ev.prevent_default()
         >
             {move || {
-                if is_playing.get() {
+                if let PlayingState::Play = playing.get() {
                     Either::Left(view! { <icon::Pause /> })
                 } else {
                     Either::Right(view! { <icon::Play /> })

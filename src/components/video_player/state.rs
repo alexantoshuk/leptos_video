@@ -4,6 +4,28 @@ use leptos::prelude::*;
 use smart_default::SmartDefault;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
+pub enum PlayingState {
+    #[default]
+    Pause,
+    PrecisePause,
+    Play,
+}
+
+impl PlayingState {
+    pub fn toggle_play(&mut self) {
+        if *self == PlayingState::Play {
+            *self = PlayingState::PrecisePause
+        } else {
+            *self = PlayingState::Play
+        }
+    }
+
+    pub fn is_playing(&self) -> bool {
+        *self == PlayingState::Play
+    }
+}
+
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub enum WaitingState {
     #[default]
     Ready, // Not waiting
