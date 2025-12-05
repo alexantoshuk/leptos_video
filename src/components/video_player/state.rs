@@ -3,7 +3,7 @@ use crate::utils::*;
 use leptos::prelude::*;
 use smart_default::SmartDefault;
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub enum PlayingState {
     #[default]
     Pause,
@@ -25,7 +25,7 @@ impl PlayingState {
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub enum WaitingState {
     #[default]
     Ready, // Not waiting
@@ -74,6 +74,27 @@ impl VideoInfo {
         }
     }
 
+    pub fn frame_from_time_string(
+        &self,
+        time_string: &str,
+        time_format: TimeFormat,
+    ) -> Option<u32> {
+        match time_format {
+            TimeFormat::Frames => {
+                if let Ok(f) = time_string.parse::<u32>() {
+                    return Some(f.min(self.end_frame));
+                }
+            }
+            TimeFormat::Timecode => {
+                if let Ok(tc) = time_string.parse::<Timecode>() {
+                    let f = tc.to_frames(self.fps);
+                    return Some(f.min(self.end_frame));
+                }
+            }
+        }
+        None
+    }
+
     pub fn end_time_string(&self, time_format: TimeFormat) -> String {
         match time_format {
             TimeFormat::Frames => self.end_frame.to_string(),
@@ -82,8 +103,8 @@ impl VideoInfo {
     }
 
     pub fn timecode_string(&self, frame: u32) -> String {
-        let show_hours = Timecode::hours(self.end_frame, self.fps) != 0;
-        let t = Timecode::from_frame(frame, self.fps);
+        let show_hours = hours_from_frames(self.end_frame, self.fps) != 0;
+        let t = Timecode::from_frames(frame, self.fps);
         t.to_string_opt(show_hours, true)
     }
 
@@ -132,60 +153,11 @@ impl AudioState {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum TimeFormat {
     #[default]
     Frames,
     Timecode,
-}
-
-pub struct VideoPlaybackState {
-    videoinfo: ReadSignal<VideoInfo>,
-    is_playing: RwSignal<bool>,
-    is_dragging: RwSignal<bool>,
-    frame: RwSignal<u32>,
-}
-
-impl VideoPlaybackState {
-    pub fn is_playing(&self) -> bool {
-        self.is_playing.get_untracked() && !self.is_dragging.get_untracked()
-    }
-
-    pub fn is_ended(&self) -> bool {
-        let f = self.frame.get_untracked();
-        let end_frame = self.videoinfo.read_untracked().end_frame;
-        f >= end_frame
-    }
-
-    pub fn seek_to_prev_frame(&self) {
-        self.is_playing.maybe_set(false);
-        self.frame.maybe_update(|f| {
-            if *f == 0 {
-                false
-            } else {
-                *f -= 1;
-                true
-            }
-        });
-    }
-
-    pub fn seek_to_next_frame(&self) {
-        self.is_playing.maybe_set(false);
-        let end_frame = self.videoinfo.read_untracked().end_frame;
-        self.frame.maybe_update(|f| {
-            if *f >= end_frame {
-                false
-            } else {
-                *f += 1;
-                true
-            }
-        });
-    }
-
-    pub fn seek_to_frame(&self, f: u32) {
-        let end_frame = self.videoinfo.read_untracked().end_frame;
-        self.frame.set(f.min(end_frame));
-    }
 }
 
 pub fn frame_from_time(time: f64, fps: f64) -> u32 {

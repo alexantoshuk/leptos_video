@@ -71,6 +71,10 @@
         duration-200;
 }
 
+@utility separator {
+    @apply h-0.5 w-full bg-white/5 my-2;
+}
+
 @utility overlay-gradient {
     background: linear-gradient(
         to bottom,

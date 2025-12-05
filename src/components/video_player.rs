@@ -157,10 +157,10 @@ pub fn VideoPlayer(
             node_ref=container_ref
             autofocus
             tabindex="-1"
-            class="@container size-full relative flex bg-black flex-col overflow-hidden touch-none group outline-none select-none"
+            class="@container size-full relative flex bg-black/60 flex-col overflow-hidden touch-none group outline-none select-none"
             on:fullscreenchange=move |_| {
                 let fscr = is_element_fullscreen(container_ref);
-                is_fullscreen.set(fscr);
+                is_fullscreen.maybe_set(fscr);
             }
             on:keydown=handle_keydown
             on:mousemove=move |_| reset_overlay_controls_timeout()
@@ -169,7 +169,8 @@ pub fn VideoPlayer(
             // Video container
             <div
                 node_ref=video_container_ref
-                class="relative flex-auto cursor-pointer select-none"
+                class="relative flex-auto cursor-pointer select-none py-1"
+                class=("py-0!", overlay)
                 class=("cursor-none!", move || overlay.get() && hide_overlay_controls.get())
                 on:contextmenu=move |ev| ev.prevent_default()
                 on:click=onclick_handler(on_click, on_dblclick)

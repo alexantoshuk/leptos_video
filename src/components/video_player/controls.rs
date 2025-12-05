@@ -121,9 +121,8 @@ fn ProgressBar(
         100.0,
     );
 
-    #[cfg(not(feature = "ssr"))]
     Effect::new(move |_| {
-        use wasm_bindgen::{JsCast, JsValue};
+        use wasm_bindgen::JsCast;
         if let Some(proxy_video) = proxy_ref.get_untracked()
             && let Some(canvas) = thumb_canvas_ref.get_untracked()
         {
@@ -473,25 +472,67 @@ fn VolumeControl(audio_state: RwSignal<AudioState>) -> impl IntoView {
 #[component]
 fn TimecodeControl(
     time_format: RwSignal<TimeFormat>,
-    #[prop(into)] frame: Signal<u32>,
+    #[prop(into)] frame: RwSignal<u32>,
     #[prop(into)] videoinfo: Signal<VideoInfo>,
 ) -> impl IntoView {
+    let input_ref = NodeRef::<html::Input>::new();
+    let time_string = move || videoinfo.read().time_string(frame.get(), time_format.get());
+    let end_time_string = { move || videoinfo.read().end_time_string(time_format.get()) };
+    let disable_time_input = RwSignal::new(true);
+
+    let on_change = move || {
+        let time_fmt = time_format.get_untracked();
+        if let Some(input) = input_ref.get_untracked() {
+            let time_string = input.value();
+            if let Some(f) = videoinfo
+                .read_untracked()
+                .frame_from_time_string(&time_string, time_fmt)
+            {
+                frame.set(f);
+            } else {
+                time_format.set(time_fmt);
+            }
+            // input.blur();
+        }
+        disable_time_input.set(true);
+    };
     view! {
         // Time display
         <div class="dropdown dropdown-top dropdown-center">
             <button tabindex="0" class="btn-player text-sm @lg:text-base font-medium">
-                <span class="text-gray-300">
-                    {move || videoinfo.read().time_string(frame.get(), time_format.get())}
-                </span>
+                <input
+                    node_ref=input_ref
+                    type="text"
+                    size=move || end_time_string().len()
+                    class="text-gray-300 text-right cursor-pointer"
+                    class=(
+                        ["cursor-default!", "pointer-events-auto"],
+                        move || !disable_time_input.get(),
+                    )
+                    disabled=disable_time_input
+                    prop:value=time_string
+                    on:change=move |ev| {
+                        ev.stop_propagation();
+                        on_change();
+                    }
+                    on:blur=move |ev| {
+                        disable_time_input.set(true);
+                    }
+                    on:keydown=move |ev| ev.stop_propagation()
+                    on:click=move |ev| {
+                        ev.stop_propagation();
+                        ev.prevent_default();
+                    }
+                />
+
                 <span class="text-gray-400">/</span>
-                <span class="text-gray-400">
-                    {move || videoinfo.read().end_time_string(time_format.get())}
-                </span>
+                <span class="text-gray-400">{end_time_string}</span>
             </button>
 
             <ul
                 tabindex="-1"
                 class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 drop-shadow-xl/50"
+                class:hidden=move || !disable_time_input.get()
             >
                 <li class="menu-title">Time format</li>
                 <li>
@@ -527,6 +568,22 @@ fn TimecodeControl(
                         >
                             <icon::Checkmark />
                         </span>
+                    </button>
+                </li>
+                <div class="separator"></div>
+                <li>
+                    <button
+                        class="flex justify-between *:pointer-events-none"
+                        on:click=move |ev| {
+                            event_target::<HtmlElement>(&ev).blur();
+                            if let Some(input) = input_ref.get_untracked() {
+                                disable_time_input.set(false);
+                                input.set_disabled(false);
+                                input.focus();
+                            }
+                        }
+                    >
+                        <span class="flex-start">Go To ...</span>
                     </button>
                 </li>
             </ul>
