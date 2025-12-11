@@ -6,6 +6,8 @@ use smart_default::SmartDefault;
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub enum PlayingState {
     #[default]
+    StartPause,
+    EndPause,
     Pause,
     PrecisePause,
     Play,
@@ -117,7 +119,7 @@ impl VideoInfo {
     }
 }
 
-#[derive(Clone, Debug, SmartDefault, PartialEq)]
+#[derive(Clone, Copy, Debug, SmartDefault, PartialEq)]
 pub struct AudioState {
     #[default = 1.0]
     pub volume: f64,

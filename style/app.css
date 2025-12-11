@@ -3,6 +3,7 @@
 
 @source not "./tailwindcss";
 @source not "./daisyui{,*}.mjs";
+@source "./src/**/*.rs";
 
 @plugin "@tailwindcss/typography";
 @plugin "./daisyui.mjs" {
@@ -14,20 +15,35 @@
         dracula;
 }
 /* Optional for custom themes – Docs: https://daisyui.com/docs/themes/#how-to-add-a-new-custom-theme */
-@plugin "./daisyui-theme.mjs" {
-    /* custom theme here */
+
+@theme inline {
+    /*--font-mono: "Noto Sans", mono;*/
+    --font-sans: "Noto Sans", sans-serif;
+    --animate-zoomfade: zoomfade 0.75s ease-out forwards;
+
+    @keyframes zoomfade {
+        0% {
+            opacity: 0;
+            scale: 0.5;
+        }
+        15% {
+            opacity: 1;
+            scale: 1;
+        }
+        85% {
+            opacity: 1;
+            scale: 1;
+        }
+        100% {
+            opacity: 0;
+            scale: 0.5;
+        }
+    }
 }
 
 @variant fullscreen (&:fullscreen);
 @variant group-fullscreen (.group:fullscreen &);
 @variant mobile (@media (hover: none) and (pointer: coarse));
-
-@source "./src/**/*.rs";
-
-@theme inline {
-    /*--font-mono: "Noto Sans", mono;*/
-    --font-sans: "Noto Sans", sans-serif;
-}
 
 @utility drop-shadow-ico {
     @apply drop-shadow-[0px_0px_4px_rgba(0,0,0,0.75)];
@@ -83,6 +99,13 @@
         transparent 90%,
         rgba(0, 0, 0, 0.6) 100%
     );
+}
+
+@variant overlay {
+    .group:fullscreen &,
+    &.overlay {
+        @slot;
+    }
 }
 
 @layer components {

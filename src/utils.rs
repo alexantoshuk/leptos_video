@@ -2,10 +2,10 @@ use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_use::core::IntoElementMaybeSignal;
 use leptos_use::utils::Pausable;
-use web_sys::{Element, HtmlVideoElement, MouseEvent};
+use web_sys::{Element, HtmlVideoElement, MouseEvent, PointerEvent};
 use web_time::{Duration, Instant};
 
-pub trait WriteSignalEx<T: PartialEq>: Update<Value = T> {
+pub trait WriteSignalEx<T: PartialEq>: Update<Value = T> + Write<Value = T> {
     fn maybe_set(&self, value: T) {
         self.maybe_update(|old| {
             if *old != value {
@@ -16,21 +16,30 @@ pub trait WriteSignalEx<T: PartialEq>: Update<Value = T> {
             }
         });
     }
+    fn set_untracked(&self, value: T) {
+        *self.write_untracked() = value;
+    }
 }
 
 impl<T> WriteSignalEx<T> for RwSignal<T> where T: Send + Sync + PartialEq + 'static {}
 impl<T> WriteSignalEx<T> for WriteSignal<T> where T: Send + Sync + PartialEq + 'static {}
 
-pub fn onclick_handler(
-    on_click: impl FnOnce(MouseEvent) + 'static + Copy,
-    on_dblclick: impl FnOnce(MouseEvent) + 'static + Copy,
-) -> impl FnMut(MouseEvent) + 'static + Copy {
-    const DURATION: Duration = Duration::from_millis(200);
+pub fn onclick_handler<EV>(
+    on_imm_click: impl FnOnce(EV) + 'static + Copy,
+    on_click: impl FnOnce(EV) + 'static + Copy,
+    on_dblclick: impl FnOnce(EV) + 'static + Copy,
+    prevent_on_click_once: Option<StoredValue<bool>>,
+) -> impl FnMut(EV) + 'static + Copy
+where
+    EV: Clone + PartialEq + 'static,
+{
+    const DURATION: Duration = Duration::from_millis(225);
     let click_timeout_handle = StoredValue::new(None::<TimeoutHandle>);
     let last_click_time = StoredValue::new(None::<Instant>);
     move |ev| {
         let now = Instant::now();
         let prev = last_click_time.get_value();
+
         if let Some(prev) = prev
             && (now - prev) < DURATION
         {
@@ -43,13 +52,21 @@ pub fn onclick_handler(
             last_click_time.set_value(None); // Reset for next potential single click
             return;
         }
+        on_imm_click(ev.clone());
+
         last_click_time.set_value(Some(now));
 
         click_timeout_handle.set_value(
             set_timeout_with_handle(
                 move || {
                     if last_click_time.get_value().is_some() {
-                        on_click(ev);
+                        if let Some(prevent_on_click_once) = prevent_on_click_once
+                            && prevent_on_click_once.get_value()
+                        {
+                            prevent_on_click_once.set_value(false);
+                        } else {
+                            on_click(ev);
+                        }
                         last_click_time.set_value(None);
                     }
                 },
@@ -93,7 +110,6 @@ pub fn use_video_frame_fn(
 ) -> Pausable<impl Fn() + Clone + Send + Sync, impl Fn() + Clone + Send + Sync> {
     use js_sys::{Function, Reflect};
     use leptos_use::{js, sendwrap_fn};
-    use send_wrapper::SendWrapper;
     use std::cell::{Cell, RefCell};
     use std::rc::Rc;
     use wasm_bindgen::closure::Closure;

@@ -56,10 +56,7 @@ pub fn Video(
         }
     };
 
-    let is_ended = move || {
-        let video = video_ref.get_untracked().unwrap();
-        frame.get_untracked() >= videoinfo_.read_untracked().end_frame
-    };
+    let is_ended = move || frame.get_untracked() >= videoinfo_.read_untracked().end_frame;
 
     let pause = move || {
         log!("press_pause");
@@ -75,19 +72,15 @@ pub fn Video(
                 return;
             }
             video.pause();
-
-            let fps = videoinfo_.read_untracked().fps;
-            let d = video.duration();
-            let timestep = 1.0 / fps;
-            let t = video.current_time() + timestep;
-            let t = if t > d {
-                if is_loop.get_untracked() { t % d } else { d }
-            } else {
-                t
-            };
-            video.set_current_time(t);
-            // let f = videoinfo_.read_untracked().frame_from_time(t);
-            // frame.set(f);
+            let end_frame = videoinfo.read_untracked().end_frame;
+            frame.maybe_update(|f| {
+                if *f >= end_frame {
+                    false
+                } else {
+                    *f += 1;
+                    true
+                }
+            });
         }
     };
 
@@ -114,6 +107,9 @@ pub fn Video(
                 }
                 let f = videoinfo_.read_untracked().frame_from_time(time);
                 frame.set(f);
+                if !is_loop.get_untracked() && f >= videoinfo_.read_untracked().end_frame {
+                    playing.set(PlayingState::EndPause);
+                }
                 // log!("prcise time: {time}, frame: {f}");
             });
         }
@@ -145,7 +141,7 @@ pub fn Video(
             PrecisePause => {
                 precise_pause();
             }
-            Pause => {
+            _ => {
                 pause();
             }
         }
@@ -209,7 +205,6 @@ pub fn Video(
                 preload="metadata"
                 class="absolute size-full object-fill pointer-events-none"
                 class:hidden=move || display_proxy.get()
-
                 on:loadedmetadata=move |_| load_metadata()
                 on:durationchange=move |_| load_metadata()
                 // on:timeupdate=move |_| {}
@@ -217,11 +212,11 @@ pub fn Video(
                 // on:play=move |_| {}
 
                 on:progress=move |_| { update_preload_progress() }
-                on:ended=move |_| {
-                    if !is_dragging.get_untracked() {
-                        playing.maybe_set(PlayingState::Pause);
-                    }
-                }
+                // on:ended=move |_| {
+                // if !is_dragging.get_untracked() {
+                // playing.maybe_set(PlayingState::EndPause);
+                // }
+                // }
                 on:waiting=move |_| {
                     set_timeout(
                         move || {
@@ -241,11 +236,11 @@ pub fn Video(
                 }
                 // on:suspend=move |_| log!("suspend")
                 on:canplay=move |_| {
-                    is_waiting.maybe_set(false);
+                    is_waiting.set(false);
                     update_preload_progress()
                 }
                 on:playing=move |_| {
-                    is_waiting.maybe_set(false);
+                    is_waiting.set(false);
                 }
                 on:seeked=move |_| {
                     display_proxy.maybe_set(false);

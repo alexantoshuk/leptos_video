@@ -5,12 +5,26 @@ mod video;
 use super::icon;
 use crate::utils::*;
 use controls::Controls;
+use leptos::either::*;
 use leptos::html;
+use leptos::logging::log;
 use leptos::prelude::*;
 use leptos_use::{UseElementSizeReturn, use_element_size, use_throttle_fn_with_arg};
 use state::{AudioState, PlayingState, TimeFormat, VideoInfo, calc_video_box};
 use video::Video;
 use web_time::Duration;
+
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+pub enum OverlayBtn {
+    #[default]
+    None,
+    Play,
+    Pause,
+    Mute,
+    UnMute,
+    FullScreenEnter,
+    FullScreenExit,
+}
 
 #[component]
 pub fn VideoPlayer(
@@ -29,13 +43,14 @@ pub fn VideoPlayer(
     let progress = RwSignal::new(0.0);
     let audio_state = RwSignal::new(AudioState::default());
     let playing = RwSignal::new(PlayingState::Pause);
+    let overlay_btn = RwSignal::new(OverlayBtn::default());
     let is_loop = RwSignal::new(false);
     let is_dragging = RwSignal::new(false);
     let is_fullscreen = RwSignal::new(false);
     let is_waiting = RwSignal::new(false);
     let hide_overlay_controls = RwSignal::new(false);
     let overlay = Signal::derive(move || overlay_controls.get() || is_fullscreen.get());
-
+    let prevent_on_click_once = StoredValue::new(false);
     let UseElementSizeReturn {
         width: video_container_width,
         height: video_container_height,
@@ -74,8 +89,23 @@ pub fn VideoPlayer(
         });
     };
 
-    let on_click = move |_| toggle_play();
-    let on_dblclick = move |_| toggle_fullscreen();
+    let on_imm_click = move |_| {
+        overlay_btn.set(match playing.get_untracked() {
+            PlayingState::Play => OverlayBtn::Pause,
+            _ => OverlayBtn::Play,
+        })
+    };
+    let on_click = move |_| {
+        toggle_play();
+    };
+    let on_dblclick = move |_| {
+        overlay_btn.set(if is_fullscreen.get_untracked() {
+            OverlayBtn::FullScreenExit
+        } else {
+            OverlayBtn::FullScreenEnter
+        });
+        toggle_fullscreen();
+    };
 
     let reset_overlay_controls_timeout = {
         let timeout = StoredValue::new(None::<TimeoutHandle>);
@@ -116,7 +146,15 @@ pub fn VideoPlayer(
                 match key.as_str() {
                     " " => toggle_play(),
                     "f" => toggle_fullscreen(),
-                    "m" => audio_state.write().toggle_mute(),
+                    "m" => {
+                        audio_state.write().toggle_mute();
+                        let ob = if audio_state.read_untracked().is_muted {
+                            OverlayBtn::Mute
+                        } else {
+                            OverlayBtn::UnMute
+                        };
+                        overlay_btn.set(ob);
+                    }
                     "ArrowLeft" => {
                         prev_frame();
                     }
@@ -152,12 +190,20 @@ pub fn VideoPlayer(
         }
     });
 
+    Effect::new(move |_| {
+        if playing.get() == PlayingState::EndPause {
+            if overlay_btn.get_untracked() == OverlayBtn::Pause {
+                prevent_on_click_once.set_value(true);
+            }
+        }
+    });
+
     view! {
         <div
             node_ref=container_ref
             autofocus
             tabindex="-1"
-            class="@container size-full relative flex bg-black/60 flex-col overflow-hidden touch-none group outline-none select-none"
+            class="@container size-full relative flex bg-neutral-900 flex-col overflow-hidden touch-none group outline-none select-none"
             on:fullscreenchange=move |_| {
                 let fscr = is_element_fullscreen(container_ref);
                 is_fullscreen.maybe_set(fscr);
@@ -169,22 +215,27 @@ pub fn VideoPlayer(
             // Video container
             <div
                 node_ref=video_container_ref
-                class="relative flex-auto cursor-pointer select-none py-1"
-                class=("py-0!", overlay)
-                class=("cursor-none!", move || overlay.get() && hide_overlay_controls.get())
+                class="relative flex-auto cursor-pointer select-none"
+                class=("overlay:cursor-none!", hide_overlay_controls)
                 on:contextmenu=move |ev| ev.prevent_default()
-                on:click=onclick_handler(on_click, on_dblclick)
-                on:dblclick=move |ev| ev.prevent_default()
+                on:click=onclick_handler(
+                    on_imm_click,
+                    on_click,
+                    on_dblclick,
+                    Some(prevent_on_click_once),
+                )
+                on:dblclick=move |ev| {
+                    ev.prevent_default();
+                    ev.stop_propagation();
+                }
             >
                 <div
                     class="absolute"
                     style=move || {
                         let aspect_ratio = videoinfo.read().aspect_ratio;
-                        let (w, h, x, y) = calc_video_box(
-                            video_container_width.get(),
-                            video_container_height.get(),
-                            aspect_ratio,
-                        );
+                        let width = video_container_width.get();
+                        let height = video_container_height.get();
+                        let (w, h, x, y) = calc_video_box(width, height, aspect_ratio);
                         let s = 1;
                         format!("width:{w}px;height:{h}px;scale:{s};translate:{x}px {y}px")
                     }
@@ -202,31 +253,30 @@ pub fn VideoPlayer(
                         audio_state
                         playback_rate
                     />
-
                     // Canvas container
                     <div class="absolute size-full pointer-events-none"></div>
                 </div>
 
                 // Overlay Controls container
-                <div
-                    class="absolute size-full flex justify-center pointer-events-none"
-                    class:hidden=move || !is_waiting.get()
-                >
-                    // Spinner
-                    <div class="loading loading-spinner scale-200 loading-xl"></div>
+                <div class="absolute size-full flex justify-center items-center pointer-events-none">
+                    <OverlayFeedback overlay_btn />
                 </div>
-
+                <Show when=move || is_waiting.get()>
+                    <div class="absolute size-full flex justify-center items-center pointer-events-none">
+                        <Spinner />
+                    </div>
+                </Show>
             </div>
 
             // Controls
             <div
                 class="transition-opacity duration-200"
-                class:opacity-0=move || overlay.get() && hide_overlay_controls.get()
+                class=("overlay:opacity-0", hide_overlay_controls)
             >
                 // Overlay container with gradient
                 <div
-                    class="absolute top-0 left-0 overlay-gradient pointer-events-none z-100"
-                    class:hidden=move || !overlay.get()
+                    class="absolute top-0 left-0 overlay-gradient pointer-events-none z-100 invisible overlay:visible"
+                    class:overlay=overlay_controls
                     style=move || {
                         format!(
                             "width:{}px;height:{}px;",
@@ -242,14 +292,13 @@ pub fn VideoPlayer(
                 <div
                     tabindex="-1"
                     node_ref=controls_ref
-                    class="flex-none outline-none bottom-0 px-3 @3xl:px-4 @4xl:px-6 z-200"
-                    class=(["absolute", "inset-x-0", "w-full"], overlay)
+                    class="flex-none outline-none bottom-0 px-3 @3xl:px-4 @4xl:px-6 z-200 overlay:absolute overlay:inset-x-0 overlay:w-full"
+                    class:overlay=overlay_controls
                 >
                     <Controls
                         proxy_ref
                         videoinfo
                         progress
-                        overlay
                         frame
                         playback_rate
                         is_dragging
@@ -263,4 +312,105 @@ pub fn VideoPlayer(
             </div>
         </div>
     }
+}
+
+#[component]
+fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoView {
+    let toggle = RwSignal::new(false);
+
+    Effect::new(move |_| {
+        let _ = overlay_btn.get();
+        toggle.set(false);
+        set_timeout(
+            move || {
+                toggle.set(true);
+            },
+            Duration::from_millis(0),
+        );
+    });
+
+    view! {
+        {move || {
+            match overlay_btn.get() {
+                OverlayBtn::Play => {
+                    EitherOf7::A(
+                        view! {
+                            <div
+                                class="size-24 rounded-full bg-black/40 flex justify-center items-center pl-1 opacity-0"
+                                class:animate-zoomfade=toggle
+                            >
+                                <icon::Play class="size-16 text-white/80" />
+                            </div>
+                        },
+                    )
+                }
+                OverlayBtn::Pause => {
+                    EitherOf7::B(
+                        view! {
+                            <div
+                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
+                                class:animate-zoomfade=toggle
+                            >
+                                <icon::Pause class="size-16 text-white/80" />
+                            </div>
+                        },
+                    )
+                }
+                OverlayBtn::FullScreenEnter => {
+                    EitherOf7::C(
+                        view! {
+                            <div
+                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
+                                class:animate-zoomfade=toggle
+                            >
+                                <icon::FullScreenEnter class="size-16 text-white/80" />
+                            </div>
+                        },
+                    )
+                }
+                OverlayBtn::FullScreenExit => {
+                    EitherOf7::D(
+                        view! {
+                            <div
+                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
+                                class:animate-zoomfade=toggle
+                            >
+                                <icon::FullScreenExit class="size-16 text-white/80" />
+                            </div>
+                        },
+                    )
+                }
+                OverlayBtn::Mute => {
+                    EitherOf7::E(
+                        view! {
+                            <div
+                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
+                                class:animate-zoomfade=toggle
+                            >
+                                <icon::Volume0 class="size-16 text-white/80" />
+                            </div>
+                        },
+                    )
+                }
+                OverlayBtn::UnMute => {
+                    EitherOf7::F(
+                        view! {
+                            <div
+                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
+                                class:animate-zoomfade=toggle
+                            >
+                                <icon::Volume2 class="size-16 text-white/80" />
+                            </div>
+                        },
+                    )
+                }
+                _ => EitherOf7::G(view! {}),
+            }
+        }}
+    }
+}
+
+#[component]
+fn Spinner() -> impl IntoView {
+    view! { <div class="loading loading-spinner size-25 bg-white/70"></div> }
 }

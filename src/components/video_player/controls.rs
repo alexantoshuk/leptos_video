@@ -16,7 +16,6 @@ pub fn Controls(
     proxy_ref: NodeRef<html::Video>,
     #[prop(into)] videoinfo: Signal<VideoInfo>,
     #[prop(into)] progress: Signal<f64>,
-    #[prop(into)] overlay: Signal<bool>,
     frame: RwSignal<u32>,
     playback_rate: RwSignal<f64>,
     is_dragging: RwSignal<bool>,
@@ -53,7 +52,7 @@ pub fn Controls(
 
     view! {
         <div class="flex-col space-y-1">
-            <ProgressBar proxy_ref videoinfo frame overlay is_dragging progress time_format />
+            <ProgressBar proxy_ref videoinfo frame is_dragging progress time_format />
 
             // <div class="flex items-center justify-between h-4"></div>
             // Control buttons
@@ -90,7 +89,6 @@ fn ProgressBar(
     proxy_ref: NodeRef<html::Video>,
     #[prop(into)] videoinfo: Signal<VideoInfo>,
     #[prop(into)] progress: Signal<f64>,
-    #[prop(into)] overlay: Signal<bool>,
     #[prop(into)] time_format: Signal<TimeFormat>,
     frame: RwSignal<u32>,
     is_dragging: RwSignal<bool>,
@@ -155,11 +153,10 @@ fn ProgressBar(
                     let pos = args.event.offset_x() as f64 / p.client_width() as f64;
                     let f = videoinfo.read_untracked().frame_from_pos(pos);
                     frame.set(f);
-                    // let result = on_dragging_start(f);
                     if args.event.pointer_type() == "touch" {
                         let _ = p.focus();
                     }
-                    // result
+
                     true
                 } else {
                     false
@@ -185,8 +182,7 @@ fn ProgressBar(
                     // on_dragging_end(f);
                 }
             })
-            .stop_propagation(true)
-            .prevent_default(true),
+            .stop_propagation(true), // .prevent_default(true),
     );
 
     view! {
@@ -194,14 +190,10 @@ fn ProgressBar(
             <div
                 node_ref=node_ref
                 tabindex="-1"
-                class="absolute outline-none group/progress origin-bottom w-full h-1 expand-clickable-area hover:scale-y-200 focus:scale-y-200 cursor-pointer transition-scale duration-200"
+                class="absolute outline-none group/progress origin-bottom w-full h-1 mt-1  bg-white/25 expand-clickable-area hover:scale-y-200 mobile:focus:scale-y-200 cursor-pointer transition-scale duration-200"
 
-                on:mouseover=move |ev| {
-                    log!("over");
-                    hover.set(Hover::Enter(ev.offset_x()))
-                }
+                on:mouseover=move |ev| { hover.set(Hover::Enter(ev.offset_x())) }
                 on:mousemove=move |ev| {
-                    log!("move");
                     let x = ev.offset_x();
                     if let Some(p) = node_ref.get_untracked() {
                         let pos = x as f64 / p.client_width() as f64;
@@ -210,14 +202,8 @@ fn ProgressBar(
                     }
                     hover.set(Hover::Move(x));
                 }
-                on:mouseout=move |ev| {
-                    log!("out");
-                    hover.set(Hover::Exit(ev.offset_x()))
-                }
+                on:mouseout=move |ev| { hover.set(Hover::Exit(ev.offset_x())) }
             >
-                // Track
-                <div class="absolute size-full bg-neutral-600 pointer-events-none" />
-                // class=("bg-white/25", move || overlay.get())
                 // Preload progress
                 <div
                     class="absolute origin-left size-full bg-white/20 transition-scale duration-200 pointer-events-none"
@@ -305,10 +291,9 @@ fn PlayPauseToggle(playing: RwSignal<PlayingState>) -> impl IntoView {
             on:keydown=move |ev| ev.prevent_default()
         >
             {move || {
-                if let PlayingState::Play = playing.get() {
-                    Either::Left(view! { <icon::Pause /> })
-                } else {
-                    Either::Right(view! { <icon::Play /> })
+                match playing.get() {
+                    PlayingState::Play => Either::Left(view! { <icon::Pause /> }),
+                    _ => Either::Right(view! { <icon::Play /> }),
                 }
             }}
         </button>
@@ -504,9 +489,15 @@ fn TimecodeControl(
                     node_ref=input_ref
                     type="text"
                     size=move || end_time_string().len()
-                    class="text-gray-300 text-right cursor-pointer"
+                    class="text-gray-300 text-right cursor-pointer pointer-events-none"
                     class=(
-                        ["cursor-default!", "pointer-events-auto"],
+                        [
+                            "cursor-default!",
+                            "pointer-events-auto!",
+                            "rounded",
+                            "outline-2",
+                            "outline-white/50",
+                        ],
                         move || !disable_time_input.get(),
                     )
                     disabled=disable_time_input
@@ -583,7 +574,7 @@ fn TimecodeControl(
                             }
                         }
                     >
-                        <span class="flex-start">Go To ...</span>
+                        <span class="flex-start">Go to ...</span>
                     </button>
                 </li>
             </ul>

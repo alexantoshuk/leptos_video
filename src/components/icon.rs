@@ -1,3 +1,4 @@
+use leptos::either::*;
 use leptos::prelude::*;
 
 #[component]
@@ -84,6 +85,14 @@ pub fn Loop(
                 d="M9.514 14.897h4.965c1.589 0 2.896-1.3 2.896-2.897 0-1.589-1.3-2.896-2.896-2.896H9.514A2.905 2.905 0 0 0 6.617 12a2.9 2.9 0 0 0 2.897 2.897"
                 opacity=move || if enable.get() { "1" } else { "0" }
             />
+        </svg>
+    }
+}
+#[component]
+pub fn Repeat(#[prop(into, optional)] class: Signal<String>) -> impl IntoView {
+    view! {
+        <svg viewBox="0 0 24 24" fill="currentColor" class=class>
+            <path d="M12 4.5a8 8 0 1 1-8 8 1 1 0 0 1 2 0 6 6 0 1 0 6-6v3.096a.4.4 0 0 1-.67.296L7.044 5.993a.667.667 0 0 1 0-.986l4.288-3.899a.4.4 0 0 1 .669.296z" />
         </svg>
     }
 }

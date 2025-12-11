@@ -18,7 +18,7 @@ pub fn VideoDetail() -> impl IntoView {
         src: "video/Metallborne3.mp4".into(),
         proxy: Some("video/Metallborne3_proxy.mp4".into()),
         fps: 25.0,
-        aspect_ratio: 1.77,
+        aspect_ratio: 16.0 / 9.0,
         ..VideoInfo::default()
     });
 
