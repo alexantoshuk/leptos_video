@@ -51,14 +51,14 @@ pub fn Controls(
     };
 
     view! {
-        <div class="flex-col space-y-1">
+        <div class="flex-col space-y-1 pb-1 pt-1">
             <ProgressBar proxy_ref videoinfo frame is_dragging progress time_format />
 
             // <div class="flex items-center justify-between h-4"></div>
             // Control buttons
             <div class="flex items-center justify-between">
                 // Left side
-                <div class="shrink-0 flex items-center">
+                <div class="shrink-0 flex items-center space-x-1">
                     <PlayPauseToggle playing />
                     <PlybackRateControl playback_rate />
                     // <PrevNextFrameButtonsGrp on_prev_click=prev_frame on_next_click=next_frame />
@@ -72,7 +72,7 @@ pub fn Controls(
                 </div>
 
                 // Right side
-                <div class="shrink-0 flex items-center space-x-0">
+                <div class="shrink-0 flex items-center space-x-1">
                     <span class="mr-2 text-base font-medium text-gray-400 text-nowrap drop-shadow-ico hidden @3xl:block">
                         {move || format!("{}fps", videoinfo.read().fps)}
                     </span>
@@ -190,7 +190,7 @@ fn ProgressBar(
             <div
                 node_ref=node_ref
                 tabindex="-1"
-                class="absolute outline-none group/progress origin-bottom w-full h-1 mt-1  bg-white/25 expand-clickable-area hover:scale-y-200 mobile:focus:scale-y-200 cursor-pointer transition-scale duration-200"
+                class="absolute outline-none group/progress origin-bottom w-full h-full  bg-white/25 expand-clickable-area hover:scale-y-200 mobile:focus:scale-y-200 cursor-pointer transition-scale duration-200"
 
                 on:mouseover=move |ev| { hover.set(Hover::Enter(ev.offset_x())) }
                 on:mousemove=move |ev| {
@@ -285,7 +285,7 @@ fn ProgressBar(
 fn PlayPauseToggle(playing: RwSignal<PlayingState>) -> impl IntoView {
     view! {
         <button
-            class="btn-player size-10 p-1"
+            class="btn-player size-8 p-0"
             type="button"
             on:click=move |_| playing.write().toggle_play()
             on:keydown=move |ev| ev.prevent_default()
@@ -307,7 +307,7 @@ where
     FN: Fn() + 'static,
 {
     view! {
-        <div class="*:btn-player *:w-8 *:h-10 hidden @3xl:flex items-center space-x-1">
+        <div class="*:btn-player *:w-8 *:h-8 hidden @3xl:flex items-center space-x-1">
             <button
                 class="p-0 pl-2"
                 on:click=move |_| on_prev_click()
@@ -339,7 +339,7 @@ fn PlybackRateControl(playback_rate: RwSignal<f64>) -> impl IntoView {
         <div class="dropdown dropdown-top dropdown-start hidden @2xl:block">
             <button
                 tabindex="0"
-                class="btn-player w-16 h-10 p-1 text-base font-medium  text-gray-400"
+                class="btn-player w-15 h-8 p-0 text-base font-medium  text-gray-400"
             >
                 <span>{move || format!("{:?}x", playback_rate.get())}</span>
             </button>
@@ -395,7 +395,7 @@ fn PlybackRateControl(playback_rate: RwSignal<f64>) -> impl IntoView {
 fn LoopToggle(is_loop: RwSignal<bool>) -> impl IntoView {
     view! {
         <button
-            class="btn-player size-10 p-1.5 hidden @xl:block"
+            class="btn-player size-8 p-0.5 hidden @xl:block"
             on:click=move |_| {
                 let r = !is_loop.get_untracked();
                 is_loop.set(r);
@@ -412,9 +412,9 @@ fn VolumeControl(audio_state: RwSignal<AudioState>) -> impl IntoView {
     let volume = move || audio_state.read().volume();
 
     view! {
-        <div class="relative group/volume h-10 mobile:hidden">
+        <div class="relative group/volume h-8 mobile:hidden">
             <button
-                class="btn-player size-10 p-2"
+                class="btn-player size-8 p-1"
                 on:click=move |_| audio_state.write().toggle_mute()
                 on:keydown=move |ev| ev.prevent_default()
             >
@@ -586,7 +586,7 @@ fn TimecodeControl(
 fn Settings() -> impl IntoView {
     view! {
         <button
-            class="btn-player size-10 p-1.25"
+            class="btn-player size-8 p-0.5"
             on:click=move |_| {}
             on:keydown=move |ev| ev.prevent_default()
         >
@@ -599,7 +599,7 @@ fn Settings() -> impl IntoView {
 fn FullscreenToggle(is_fullscreen: RwSignal<bool>) -> impl IntoView {
     view! {
         <button
-            class="btn-player size-10 p-1.5"
+            class="btn-player size-8 p-0.5"
             on:click=move |_| {
                 let p = !is_fullscreen.get_untracked();
                 is_fullscreen.set(p);

@@ -22,8 +22,6 @@ pub enum OverlayBtn {
     Pause,
     Mute,
     UnMute,
-    FullScreenEnter,
-    FullScreenExit,
 }
 
 #[component]
@@ -99,11 +97,11 @@ pub fn VideoPlayer(
         toggle_play();
     };
     let on_dblclick = move |_| {
-        overlay_btn.set(if is_fullscreen.get_untracked() {
-            OverlayBtn::FullScreenExit
-        } else {
-            OverlayBtn::FullScreenEnter
+        overlay_btn.set(match playing.get_untracked() {
+            PlayingState::Play => OverlayBtn::Play,
+            _ => OverlayBtn::Pause,
         });
+
         toggle_fullscreen();
     };
 
@@ -333,7 +331,7 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
         {move || {
             match overlay_btn.get() {
                 OverlayBtn::Play => {
-                    EitherOf7::A(
+                    EitherOf5::A(
                         view! {
                             <div
                                 class="size-24 rounded-full bg-black/40 flex justify-center items-center pl-1 opacity-0"
@@ -345,7 +343,7 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
                     )
                 }
                 OverlayBtn::Pause => {
-                    EitherOf7::B(
+                    EitherOf5::B(
                         view! {
                             <div
                                 class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
@@ -356,32 +354,8 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
                         },
                     )
                 }
-                OverlayBtn::FullScreenEnter => {
-                    EitherOf7::C(
-                        view! {
-                            <div
-                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
-                                class:animate-zoomfade=toggle
-                            >
-                                <icon::FullScreenEnter class="size-16 text-white/80" />
-                            </div>
-                        },
-                    )
-                }
-                OverlayBtn::FullScreenExit => {
-                    EitherOf7::D(
-                        view! {
-                            <div
-                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
-                                class:animate-zoomfade=toggle
-                            >
-                                <icon::FullScreenExit class="size-16 text-white/80" />
-                            </div>
-                        },
-                    )
-                }
                 OverlayBtn::Mute => {
-                    EitherOf7::E(
+                    EitherOf5::C(
                         view! {
                             <div
                                 class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
@@ -393,7 +367,7 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
                     )
                 }
                 OverlayBtn::UnMute => {
-                    EitherOf7::F(
+                    EitherOf5::D(
                         view! {
                             <div
                                 class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
@@ -404,7 +378,7 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
                         },
                     )
                 }
-                _ => EitherOf7::G(view! {}),
+                _ => EitherOf5::E(()),
             }
         }}
     }
