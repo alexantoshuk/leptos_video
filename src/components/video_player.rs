@@ -142,7 +142,13 @@ pub fn VideoPlayer(
                 // ev.stop_propagation();
                 // ev.prevent_default();
                 match key.as_str() {
-                    " " => toggle_play(),
+                    " " => {
+                        toggle_play();
+                        overlay_btn.set(match playing.get_untracked() {
+                            PlayingState::Play => OverlayBtn::Play,
+                            _ => OverlayBtn::Pause,
+                        });
+                    }
                     "f" => toggle_fullscreen(),
                     "m" => {
                         audio_state.write().toggle_mute();
@@ -326,17 +332,15 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
             Duration::from_millis(0),
         );
     });
-
+    let round_btn_class =
+        "size-24 rounded-full bg-black/50 flex justify-center items-center opacity-0";
     view! {
         {move || {
             match overlay_btn.get() {
                 OverlayBtn::Play => {
                     EitherOf5::A(
                         view! {
-                            <div
-                                class="size-24 rounded-full bg-black/40 flex justify-center items-center pl-1 opacity-0"
-                                class:animate-zoomfade=toggle
-                            >
+                            <div class=round_btn_class class:pl-2 class:animate-zoomfade2=toggle>
                                 <icon::Play class="size-16 text-white/80" />
                             </div>
                         },
@@ -345,10 +349,7 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
                 OverlayBtn::Pause => {
                     EitherOf5::B(
                         view! {
-                            <div
-                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
-                                class:animate-zoomfade=toggle
-                            >
+                            <div class=round_btn_class class:animate-zoomfade2=toggle>
                                 <icon::Pause class="size-16 text-white/80" />
                             </div>
                         },
@@ -357,10 +358,7 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
                 OverlayBtn::Mute => {
                     EitherOf5::C(
                         view! {
-                            <div
-                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
-                                class:animate-zoomfade=toggle
-                            >
+                            <div class=round_btn_class class:animate-zoomfade2=toggle>
                                 <icon::Volume0 class="size-16 text-white/80" />
                             </div>
                         },
@@ -369,10 +367,7 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
                 OverlayBtn::UnMute => {
                     EitherOf5::D(
                         view! {
-                            <div
-                                class="size-24 rounded-full bg-black/40 flex justify-center items-center opacity-0"
-                                class:animate-zoomfade=toggle
-                            >
+                            <div class=round_btn_class class:animate-zoomfade2=toggle>
                                 <icon::Volume2 class="size-16 text-white/80" />
                             </div>
                         },

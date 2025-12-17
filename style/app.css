@@ -20,6 +20,7 @@
     /*--font-mono: "Noto Sans", mono;*/
     --font-sans: "Noto Sans", sans-serif;
     --animate-zoomfade: zoomfade 0.75s ease-out forwards;
+    --animate-zoomfade2: zoomfade2 0.5s ease-out forwards;
 
     @keyframes zoomfade {
         0% {
@@ -37,6 +38,24 @@
         100% {
             opacity: 0;
             scale: 0.5;
+        }
+    }
+
+    @keyframes zoomfade2 {
+        0% {
+            opacity: 0;
+            scale: 0.25;
+        }
+        5% {
+            opacity: 1;
+            scale: 0.7;
+        }
+        50% {
+            opacity: 1;
+        }
+        100% {
+            opacity: 0;
+            scale: 1.1;
         }
     }
 }
@@ -62,7 +81,7 @@
 }
 
 @utility compact-volume {
-    @apply w-24 p-3 left-0 origin-top-left -rotate-90 bg-black outline-solid outline-1 outline-neutral-700 drop-shadow-xl/50 invisible;
+    @apply w-24 p-3 left-0 origin-top-left -rotate-90 bg-neutral-900 outline-solid outline-1 outline-neutral-700 drop-shadow-xl/50 invisible;
 }
 
 @utility base-volume {

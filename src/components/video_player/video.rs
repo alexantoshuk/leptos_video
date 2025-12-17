@@ -85,6 +85,7 @@ pub fn Video(
     };
 
     let play = move || {
+        log!("play");
         if let Some(video) = video_ref.get_untracked() {
             if !video.paused() {
                 return;

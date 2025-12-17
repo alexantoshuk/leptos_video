@@ -54,11 +54,11 @@ pub fn Controls(
         <div class="flex-col space-y-1 pb-1 pt-1">
             <ProgressBar proxy_ref videoinfo frame is_dragging progress time_format />
 
-            // <div class="flex items-center justify-between h-4"></div>
+            <div class="flex items-center justify-between h-4"></div>
             // Control buttons
             <div class="flex items-center justify-between">
                 // Left side
-                <div class="shrink-0 flex items-center space-x-1">
+                <div class="shrink-0 flex items-center space-x-2">
                     <PlayPauseToggle playing />
                     <PlybackRateControl playback_rate />
                     // <PrevNextFrameButtonsGrp on_prev_click=prev_frame on_next_click=next_frame />
@@ -72,10 +72,10 @@ pub fn Controls(
                 </div>
 
                 // Right side
-                <div class="shrink-0 flex items-center space-x-1">
-                    <span class="mr-2 text-base font-medium text-gray-400 text-nowrap drop-shadow-ico hidden @3xl:block">
-                        {move || format!("{}fps", videoinfo.read().fps)}
-                    </span>
+                <div class="shrink-0 flex items-center space-x-2">
+                    // <div class="mr-2 text-base font-medium text-gray-400 text-nowrap drop-shadow-ico hidden @3xl:block">
+                    // {move || format!("{}fps", videoinfo.read().fps)}
+                    // </div>
                     <Settings />
                     <FullscreenToggle is_fullscreen />
                 </div>
@@ -190,7 +190,7 @@ fn ProgressBar(
             <div
                 node_ref=node_ref
                 tabindex="-1"
-                class="absolute outline-none group/progress origin-bottom w-full h-full  bg-white/25 expand-clickable-area hover:scale-y-200 mobile:focus:scale-y-200 cursor-pointer transition-scale duration-200"
+                class="absolute outline-none group/progress origin-bottom w-full h-full bg-white/25 expand-clickable-area hover:scale-y-200 mobile:focus:scale-y-200 cursor-pointer transition-scale duration-200"
 
                 on:mouseover=move |ev| { hover.set(Hover::Enter(ev.offset_x())) }
                 on:mousemove=move |ev| {
@@ -239,7 +239,6 @@ fn ProgressBar(
                         }
                     />
                 </div>
-
             </div>
             <div
                 class="absolute transition-opacity duration-200 delay-100 flex flex-col items-center gap-2 pointer-events-none"
@@ -339,7 +338,7 @@ fn PlybackRateControl(playback_rate: RwSignal<f64>) -> impl IntoView {
         <div class="dropdown dropdown-top dropdown-start hidden @2xl:block">
             <button
                 tabindex="0"
-                class="btn-player w-15 h-8 p-0 text-base font-medium  text-gray-400"
+                class="btn-player w-13 h-8 p-0 text-base font-medium  text-gray-400"
             >
                 <span>{move || format!("{:?}x", playback_rate.get())}</span>
             </button>
@@ -462,7 +461,7 @@ fn TimecodeControl(
 ) -> impl IntoView {
     let input_ref = NodeRef::<html::Input>::new();
     let time_string = move || videoinfo.read().time_string(frame.get(), time_format.get());
-    let end_time_string = { move || videoinfo.read().end_time_string(time_format.get()) };
+    let end_time_string = move || videoinfo.read().end_time_string(time_format.get());
     let disable_time_input = RwSignal::new(true);
 
     let on_change = move || {
@@ -522,7 +521,7 @@ fn TimecodeControl(
 
             <ul
                 tabindex="-1"
-                class="dropdown-content menu bg-base-100 rounded-box z-1 w-52 p-2 drop-shadow-xl/50"
+                class="dropdown-content menu modal-box bg-base-100 rounded-box z-1 w-52 p-2 drop-shadow-xl/50"
                 class:hidden=move || !disable_time_input.get()
             >
                 <li class="menu-title">Time format</li>
