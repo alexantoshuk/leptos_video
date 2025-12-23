@@ -40,7 +40,7 @@ pub fn VideoPlayer(
     let time_format = RwSignal::new(TimeFormat::default());
     let progress = RwSignal::new(0.0);
     let audio_state = RwSignal::new(AudioState::default());
-    let playing = RwSignal::new(PlayingState::Pause);
+    let playing = RwSignal::new(PlayingState::StartPause);
     let overlay_btn = RwSignal::new(OverlayBtn::default());
     let is_loop = RwSignal::new(false);
     let is_dragging = RwSignal::new(false);
@@ -270,6 +270,7 @@ pub fn VideoPlayer(
                         <Spinner />
                     </div>
                 </Show>
+
             </div>
 
             // Controls
@@ -319,6 +320,9 @@ pub fn VideoPlayer(
 }
 
 #[component]
+fn OverlayButton(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoView {}
+
+#[component]
 fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoView {
     let toggle = RwSignal::new(false);
 
@@ -332,8 +336,10 @@ fn OverlayFeedback(#[prop(into)] overlay_btn: Signal<OverlayBtn>) -> impl IntoVi
             Duration::from_millis(0),
         );
     });
+
     let round_btn_class =
         "size-24 rounded-full bg-black/50 flex justify-center items-center opacity-0";
+
     view! {
         {move || {
             match overlay_btn.get() {

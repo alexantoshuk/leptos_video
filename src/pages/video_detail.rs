@@ -15,8 +15,9 @@ pub fn VideoDetail() -> impl IntoView {
     // let count = RwSignal::new(0);
     // let on_click = move |_| *count.write() += 1;
     let videoinfo = RwSignal::new(VideoInfo {
+        poster: "video/poster.jpg".into(),
         src: "video/Metallborne3.mp4".into(),
-        proxy: Some("video/Metallborne3_proxy.mp4".into()),
+        proxy: "video/Metallborne3_proxy.mp4".into(),
         fps: 25.0,
         aspect_ratio: 16.0 / 9.0,
         ..VideoInfo::default()

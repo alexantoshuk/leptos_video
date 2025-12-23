@@ -39,9 +39,9 @@ pub enum WaitingState {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VideoInfo {
+    pub poster: String,
     pub src: String,
-    pub proxy: Option<String>,
-    pub poster: Option<String>,
+    pub proxy: String,
     pub fps: f64,
     pub aspect_ratio: f64,
     pub end_frame: u32,

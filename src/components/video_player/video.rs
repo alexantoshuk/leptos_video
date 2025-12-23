@@ -97,25 +97,6 @@ pub fn Video(
         }
     };
 
-    // on create
-    Effect::new(move |_| {
-        load_metadata();
-        if let Some(video) = video_ref.get_untracked() {
-            use_video_frame_fn(video, move |time| {
-                // log!("prcise time begin");
-                if is_dragging.get_untracked() || playing.get_untracked() != PlayingState::Play {
-                    return;
-                }
-                let f = videoinfo_.read_untracked().frame_from_time(time);
-                frame.set(f);
-                if !is_loop.get_untracked() && f >= videoinfo_.read_untracked().end_frame {
-                    playing.set(PlayingState::EndPause);
-                }
-                // log!("prcise time: {time}, frame: {f}");
-            });
-        }
-    });
-
     // audio state change
     Effect::new(move |_| {
         if let Some(video) = video_ref.get_untracked() {
@@ -132,22 +113,6 @@ pub fn Video(
         }
     });
 
-    // playing
-    Effect::new(move |_| {
-        use PlayingState::*;
-        match playing.get() {
-            Play => {
-                play();
-            }
-            PrecisePause => {
-                precise_pause();
-            }
-            _ => {
-                pause();
-            }
-        }
-    });
-
     // loop
     Effect::new(move |_| {
         if let Some(video) = video_ref.get_untracked() {
@@ -155,46 +120,95 @@ pub fn Video(
         }
     });
 
+    // playing
+    Effect::watch(
+        move || playing.get(),
+        move |playing, _, _| {
+            use PlayingState::*;
+            match playing {
+                Play => {
+                    play();
+                }
+                PrecisePause => {
+                    precise_pause();
+                }
+                _ => {
+                    pause();
+                }
+            }
+        },
+        false,
+    );
+
     // start/end seek
-    Effect::new(move |_| {
-        if is_dragging.get() {
-            // start dragging seek
-            pause();
-            let f = frame.get_untracked();
-            // container_ref.get_untracked().unwrap().focus();
-            if let Some(_) = proxy_ref.get_untracked() {
-                set_current_frame(proxy_ref, f);
+    Effect::watch(
+        move || is_dragging.get(),
+        move |&is_dragging, _, _| {
+            if is_dragging {
+                // start dragging seek
+                pause();
+                let f = frame.get_untracked();
+                // container_ref.get_untracked().unwrap().focus();
+                if let Some(_) = proxy_ref.get_untracked() {
+                    set_current_frame(proxy_ref, f);
+                } else {
+                    set_current_frame(video_ref, f);
+                }
             } else {
+                // reset_overlay_controls_timeout();
+                // end dragging seek
+                let f = frame.get_untracked();
+                let f = if playing.get_untracked() == PlayingState::Play {
+                    videoinfo_.read_untracked().end_frame.min(f + 1)
+                } else {
+                    f
+                };
                 set_current_frame(video_ref, f);
             }
-        } else {
-            // reset_overlay_controls_timeout();
-            // end dragging seek
-            let f = frame.get_untracked();
-            let f = if playing.get_untracked() == PlayingState::Play {
-                videoinfo_.read_untracked().end_frame.min(f + 1)
-            } else {
-                f
-            };
-            set_current_frame(video_ref, f);
+        },
+        false,
+    );
+
+    Effect::watch(
+        move || frame.get(),
+        move |&frame, _, _| {
+            if is_dragging.get_untracked() {
+                // dragging seek process
+                if let Some(_) = proxy_ref.get_untracked() {
+                    set_current_frame(proxy_ref, frame);
+                } else {
+                    set_current_frame(video_ref, frame);
+                }
+            } else if playing.get_untracked() != PlayingState::Play {
+                // user set frame seek
+                // pause();
+                set_current_frame(video_ref, frame);
+            }
+        },
+        false,
+    );
+
+    // on create
+    Effect::new(move |_| {
+        load_metadata();
+        if let Some(video) = video_ref.get_untracked() {
+            use_video_frame_fn(video, move |time| {
+                // log!("prcise time begin");
+                if is_dragging.get_untracked() || playing.get_untracked() != PlayingState::Play {
+                    return;
+                }
+                let f = videoinfo_.read_untracked().frame_from_time(time);
+
+                if !is_loop.get_untracked() && f >= videoinfo_.read_untracked().end_frame {
+                    playing.set(PlayingState::EndPause);
+                }
+
+                frame.set(f);
+                // log!("prcise time: {time}, frame: {f}");
+            });
         }
     });
 
-    Effect::new(move |_| {
-        let f = frame.get();
-        if is_dragging.get_untracked() {
-            // dragging seek process
-            if let Some(_) = proxy_ref.get_untracked() {
-                set_current_frame(proxy_ref, f);
-            } else {
-                set_current_frame(video_ref, f);
-            }
-        } else if playing.get_untracked() != PlayingState::Play {
-            // user set frame seek
-            // pause();
-            set_current_frame(video_ref, f);
-        }
-    });
     view! {
         <>
             <video
@@ -202,6 +216,7 @@ pub fn Video(
                 playsinline
                 disablepictureinpicture
                 node_ref=video_ref
+                poster=move || videoinfo_.read().poster.clone()
                 src=move || videoinfo_.read().src.clone()
                 preload="metadata"
                 class="absolute size-full object-fill pointer-events-none"
@@ -231,7 +246,6 @@ pub fn Video(
                         Duration::from_secs(1),
                     );
                 }
-
                 on:stalled=move |_| {
                     is_waiting.set(true);
                 }
@@ -256,12 +270,12 @@ pub fn Video(
                     }
                 }
             />
-            <Show when=move || videoinfo_.read().proxy.is_some()>
+            <Show when=move || !videoinfo_.read().proxy.is_empty()>
                 <video
                     playsinline
                     disablepictureinpicture
                     node_ref=proxy_ref
-                    src=move || videoinfo_.read().proxy.clone().unwrap()
+                    src=move || videoinfo_.read().proxy.clone()
                     preload="auto"
                     class="absolute size-full object-fill pointer-events-none"
                     class:hidden=move || !display_proxy.get()
