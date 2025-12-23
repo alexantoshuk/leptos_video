@@ -60,8 +60,9 @@ pub fn Controls(
                 // Left side
                 <div class="shrink-0 flex items-center space-x-2">
                     <PlayPauseToggle playing />
+                    <PrevNextFrameButtonsGrp on_prev_click=prev_frame on_next_click=next_frame />
                     <PlybackRateControl playback_rate />
-                    // <PrevNextFrameButtonsGrp on_prev_click=prev_frame on_next_click=next_frame />
+
                     <LoopToggle is_loop />
                     <VolumeControl audio_state />
                 </div>
@@ -73,9 +74,9 @@ pub fn Controls(
 
                 // Right side
                 <div class="shrink-0 flex items-center space-x-2">
-                    // <div class="mr-2 text-base font-medium text-gray-400 text-nowrap drop-shadow-ico hidden @3xl:block">
-                    // {move || format!("{}fps", videoinfo.read().fps)}
-                    // </div>
+                    <div class="mr-2 text-base font-medium text-gray-400 text-nowrap drop-shadow-ico hidden @3xl:block">
+                        {move || format!("{}fps", videoinfo.read().fps)}
+                    </div>
                     <Settings />
                     <FullscreenToggle is_fullscreen />
                 </div>
@@ -120,11 +121,13 @@ fn ProgressBar(
     );
 
     Effect::new(move |_| {
-        use wasm_bindgen::JsCast;
-        if let Some(proxy_video) = proxy_ref.get_untracked()
+        let thumb_frame = thumb_frame.get();
+
+        if !is_dragging.get_untracked()
+            && let Some(proxy_video) = proxy_ref.get_untracked()
             && let Some(canvas) = thumb_canvas_ref.get_untracked()
         {
-            let thumb_frame = thumb_frame.get();
+            use wasm_bindgen::JsCast;
             let time = videoinfo.read_untracked().time_from_frame(thumb_frame);
             proxy_video.set_current_time(time);
 
@@ -209,7 +212,6 @@ fn ProgressBar(
                     class="absolute origin-left size-full bg-white/20 transition-scale duration-200 pointer-events-none"
                     style:scale=move || { format!("{} 1", progress.get()) }
                 />
-
                 // Progress
                 <div
                     class="absolute origin-left size-full bg-primary pointer-events-none"
@@ -218,7 +220,6 @@ fn ProgressBar(
                         format!("{} 1", p)
                     }
                 />
-
                 // Cursor
                 <div
                     class="absolute origin-left size-full pointer-events-none"
@@ -270,7 +271,6 @@ fn ProgressBar(
                         let (w, h) = thumbnail_size(aspect_ratio);
                         view! { <canvas node_ref=thumb_canvas_ref width=w height=h></canvas> }
                     }}
-
                 </div>
                 <div class="text-base font-bold drop-shadow-ico text-neutral-300 text-center">
                     {move || { videoinfo.read().time_string(thumb_frame.get(), time_format.get()) }}
